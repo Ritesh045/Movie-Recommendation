@@ -110,21 +110,84 @@ def generate_fallback_poster(title: str, genres: str = "") -> str:
     return f"data:image/svg+xml;charset=utf-8,{encoded_svg}"
 
 
+# In-memory poster cache pre-populated from data/poster_cache.json
+POSTER_CACHE = {}
+_POSTER_CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'poster_cache.json')
+
+if os.path.exists(_POSTER_CACHE_FILE):
+    try:
+        import json
+        with open(_POSTER_CACHE_FILE, 'r', encoding='utf-8') as _f:
+            POSTER_CACHE = json.load(_f)
+        print(f"[SUCCESS] Loaded {len(POSTER_CACHE)} pre-cached movie posters.")
+    except Exception as _err:
+        print(f"[WARN] Unable to load poster_cache.json: {_err}")
+
+
 @functools.lru_cache(maxsize=8192)
 def get_movie_poster_url(tmdb_id: int = 0, title: str = "", genres: str = "") -> str:
     """
-    Returns high-resolution curated poster URL or instant gradient poster fallback.
-    Guarantees 0ms latency for ultra-fast API response times.
+    Returns high-resolution TMDB poster URL.
+    Order of Resolution:
+    1. Pre-populated disk/memory cache (POSTER_CACHE)
+    2. Curated poster dictionary (CURATED_POSTERS)
+    3. Direct TMDB API by tmdb_id (/movie/{id})
+    4. TMDB Search API by cleaned title (/search/movie)
+    5. High-quality SVG gradient poster fallback
     """
     cleaned_title = clean_movie_title(title)
-    lower_title = cleaned_title.lower()
+    lower_title = cleaned_title.lower().strip()
+    str_tid = str(int(tmdb_id)) if tmdb_id and tmdb_id > 0 else ""
 
-    # 0. Check Curated High-Res Poster Dictionary
+    # 1. Check pre-cached JSON dictionary by tmdb_id
+    if str_tid and str_tid in POSTER_CACHE:
+        return POSTER_CACHE[str_tid]
+
+    # 2. Check pre-cached JSON dictionary by clean title
+    if lower_title and lower_title in POSTER_CACHE:
+        return POSTER_CACHE[lower_title]
+
+    # 3. Check Curated High-Res Poster Dictionary
     for key, poster_link in CURATED_POSTERS.items():
-        if key in lower_title:
+        if key in lower_title or lower_title in key:
             return poster_link
 
-    # 1. Fallback to instant high-quality gradient SVG poster
+    # 4. Fetch directly from TMDB API by tmdb_id
+    api_key = TMDB_API_KEY if TMDB_API_KEY and TMDB_API_KEY != "your_tmdb_api_key_here" else "32372bca282ac092ac23fc018fe038d8"
+    if tmdb_id and tmdb_id > 0:
+        try:
+            url = f"https://api.themoviedb.org/3/movie/{int(tmdb_id)}?api_key={api_key}"
+            resp = requests.get(url, timeout=2.0)
+            if resp.status_code == 200:
+                p_path = resp.json().get("poster_path")
+                if p_path:
+                    poster_url = f"{TMDB_IMAGE_BASE_URL}{p_path}"
+                    POSTER_CACHE[str_tid] = poster_url
+                    if lower_title:
+                        POSTER_CACHE[lower_title] = poster_url
+                    return poster_url
+        except Exception:
+            pass
+
+    # 5. Fetch from TMDB Search API by title
+    if cleaned_title:
+        try:
+            safe_query = urllib.parse.quote(cleaned_title)
+            search_url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={safe_query}"
+            resp = requests.get(search_url, timeout=2.0)
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                if results and results[0].get("poster_path"):
+                    poster_url = f"{TMDB_IMAGE_BASE_URL}{results[0]['poster_path']}"
+                    if str_tid:
+                        POSTER_CACHE[str_tid] = poster_url
+                    if lower_title:
+                        POSTER_CACHE[lower_title] = poster_url
+                    return poster_url
+        except Exception:
+            pass
+
+    # 6. Fallback to instant high-quality gradient SVG poster if poster missing in TMDB
     return generate_fallback_poster(cleaned_title or title, genres)
 
 
