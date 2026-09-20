@@ -1,0 +1,762 @@
+/* Netflix-style Navbar */
+.navbar-cinesphere {
+  background-color: transparent;
+  transition: background-color 0.4s ease, padding 0.4s ease;
+  padding: 16px 4%;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 1000;
+}
+
+.navbar-cinesphere.scrolled {
+  background-color: #141414;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  padding: 10px 4%;
+}
+
+.brand-logo {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--netflix-red);
+  letter-spacing: -0.5px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-logo:hover {
+  color: var(--netflix-red-hover);
+}
+
+.nav-link-custom {
+  color: #e5e5e5;
+  font-weight: 500;
+  font-size: 0.95rem;
+  margin-left: 20px;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.nav-link-custom:hover {
+  color: #b3b3b3;
+}
+
+.nav-link-custom.active {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Search Bar */
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  background-color: rgba(0, 0, 0, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 4px;
+  padding: 6px 12px 6px 36px;
+  font-size: 0.88rem;
+  width: 220px;
+  transition: width 0.3s ease, border-color 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  width: 280px;
+  border-color: var(--netflix-red);
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: #b3b3b3;
+  pointer-events: none;
+}
+
+/* Hero Banner */
+.hero-banner {
+  position: relative;
+  height: 80vh;
+  min-height: 500px;
+  max-height: 750px;
+  background-size: cover;
+  background-position: center top;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 60px;
+  margin-bottom: -40px;
+  transition: background-image 0.5s ease-in-out;
+}
+
+.hero-slide-fade {
+  animation: heroBgFade 0.8s ease-in-out forwards;
+}
+
+.hero-content-slide {
+  animation: heroContentSlide 0.7s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+@keyframes heroBgFade {
+  0% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes heroContentSlide {
+  0% {
+    opacity: 0;
+    transform: translateX(36px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.hero-gradient-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    rgba(20, 20, 20, 0.3) 0%,
+    rgba(20, 20, 20, 0.6) 60%,
+    #141414 100%
+  ),
+  linear-gradient(
+    90deg,
+    rgba(20, 20, 20, 0.9) 0%,
+    rgba(20, 20, 20, 0.4) 50%,
+    transparent 100%
+  );
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  padding: 0 4%;
+  max-width: 650px;
+}
+
+.hero-title {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 12px;
+  text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.8);
+}
+
+.hero-metadata {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.95rem;
+  margin-bottom: 14px;
+}
+
+.badge-match {
+  color: var(--match-green);
+  font-weight: 700;
+}
+
+.badge-rating {
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.hero-overview {
+  font-size: 1rem;
+  color: #e5e5e5;
+  line-height: 1.5;
+  margin-bottom: 20px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.btn-hero-play {
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 700;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 4px;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-hero-play:hover {
+  background-color: rgba(255, 255, 255, 0.85);
+  transform: scale(1.03);
+  color: #000000;
+}
+
+.btn-hero-info {
+  background-color: rgba(109, 109, 110, 0.7);
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 4px;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-left: 12px;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  text-decoration: none;
+}
+
+.btn-hero-info:hover {
+  background-color: rgba(109, 109, 110, 0.4);
+  transform: scale(1.03);
+  color: #ffffff;
+}
+
+/* Hero Slider Navigation Arrows & Indicators */
+.hero-slider-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 15;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+  border: none;
+  width: 46px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease, background-color 0.2s ease, transform 0.2s ease;
+  border-radius: 4px;
+}
+
+.hero-banner:hover .hero-slider-btn {
+  opacity: 1;
+}
+
+.hero-slider-btn:hover {
+  background-color: var(--netflix-red);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.hero-slider-btn.prev {
+  left: 16px;
+}
+
+.hero-slider-btn.next {
+  right: 16px;
+}
+
+.hero-dots-container {
+  position: absolute;
+  bottom: 30px;
+  right: 4%;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.4);
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  padding: 0;
+}
+
+.hero-dot:hover {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+.hero-dot.active {
+  width: 28px;
+  border-radius: 6px;
+  background-color: var(--netflix-red);
+  box-shadow: 0 0 12px rgba(229, 9, 20, 0.7);
+}
+
+
+/* MovieRow Horizontal Scroll Container */
+.movie-row {
+  margin: 30px 0;
+  padding: 0 4%;
+}
+
+.row-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #e5e5e5;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row-carousel-wrapper {
+  position: relative;
+}
+
+.row-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 14px 4px;
+}
+
+.row-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease, background-color 0.2s ease;
+}
+
+.row-carousel-wrapper:hover .carousel-nav-btn {
+  opacity: 1;
+}
+
+.carousel-nav-btn:hover {
+  background-color: var(--netflix-red);
+}
+
+.carousel-nav-btn.left {
+  left: -20px;
+}
+
+.carousel-nav-btn.right {
+  right: -20px;
+}
+
+/* Netflix MovieCard Scale-On-Hover */
+.movie-card-container {
+  flex: 0 0 auto;
+  width: 200px;
+  position: relative;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), z-index 0.3s ease;
+}
+
+.movie-card-container:hover {
+  transform: scale(1.08);
+  z-index: 50;
+}
+
+/* Top 10 Today Row Special Styling */
+.top10-row .row-carousel {
+  padding-left: 35px;
+  gap: 24px;
+}
+
+.movie-card-container.has-rank {
+  margin-left: 20px;
+}
+
+.top10-rank-number {
+  position: absolute;
+  left: -38px;
+  bottom: -4px;
+  font-size: 7.8rem;
+  font-weight: 900;
+  line-height: 0.8;
+  color: #141414;
+  -webkit-text-stroke: 4px #595959;
+  z-index: 2;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, sans-serif;
+  letter-spacing: -6px;
+  text-shadow: 2px 2px 12px rgba(0, 0, 0, 0.9);
+  transition: all 0.3s ease;
+}
+
+.movie-card-container.has-rank:hover .top10-rank-number {
+  -webkit-text-stroke: 4px var(--netflix-red);
+  color: #000000;
+}
+
+.movie-card-poster {
+  width: 100%;
+  height: 290px;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.movie-card-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.7) 60%, transparent 100%);
+  padding: 12px;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.movie-card-container:hover .movie-card-overlay {
+  opacity: 1;
+}
+
+.card-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+.card-match-pill {
+  background-color: rgba(70, 211, 105, 0.2);
+  color: var(--match-green);
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.card-rating-star {
+  color: #ffd700;
+  font-weight: 600;
+}
+
+.card-genre-tags {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Recommendation Mode Toggle */
+.mode-toggle-container {
+  display: inline-flex;
+  background-color: #222222;
+  padding: 4px;
+  border-radius: 8px;
+  gap: 4px;
+  margin: 16px 0;
+}
+
+.mode-toggle-btn {
+  background: none;
+  border: none;
+  color: #b3b3b3;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-toggle-btn.active {
+  background-color: var(--netflix-red);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(229, 9, 20, 0.4);
+}
+
+/* Loading Spinner */
+.spinner-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 0;
+}
+
+.netflix-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(229, 9, 20, 0.2);
+  border-left-color: var(--netflix-red);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Authentic Original Netflix Footer Styling */
+.netflix-footer {
+  background-color: #141414;
+  border-top: 1px solid #232323;
+  color: #808080;
+  padding: 60px 4% 50px;
+  margin-top: 5rem;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.netflix-footer-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.netflix-footer-socials {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.netflix-footer-socials a {
+  color: #ffffff;
+  opacity: 0.85;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.netflix-footer-socials a:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.netflix-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px 24px;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 768px) {
+  .netflix-footer-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .netflix-footer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.netflix-footer-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.netflix-footer-col a {
+  color: #a6a6a6;
+  font-size: 0.84rem;
+  text-decoration: none;
+  transition: color 0.2s ease, text-decoration 0.2s ease;
+}
+
+.netflix-footer-col a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.netflix-footer-lang-container {
+  margin-bottom: 24px;
+}
+
+.netflix-lang-picker {
+  position: relative;
+  display: inline-block;
+}
+
+.lang-globe-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #a6a6a6;
+  pointer-events: none;
+}
+
+.lang-arrow-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #a6a6a6;
+  pointer-events: none;
+}
+
+.lang-select-input {
+  background-color: rgba(0, 0, 0, 0.75);
+  border: 1px solid #404040;
+  color: #ffffff;
+  font-size: 0.84rem;
+  padding: 8px 32px 8px 36px;
+  border-radius: 4px;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.lang-select-input:focus,
+.lang-select-input:hover {
+  border-color: #ffffff;
+}
+
+.netflix-footer-service-code {
+  margin-bottom: 24px;
+}
+
+.service-code-btn {
+  background: transparent;
+  border: 1px solid #555555;
+  color: #b3b3b3;
+  font-size: 0.78rem;
+  padding: 6px 10px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.service-code-btn:hover {
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+.netflix-footer-copyright {
+  font-size: 0.78rem;
+  color: #737373;
+  line-height: 1.5;
+}
+
+.copyright-title {
+  color: #8c8c8c;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.copyright-sub {
+  margin-bottom: 0;
+  color: #666666;
+}
+
+/* Trending Page Custom Styling */
+.trending-header-box {
+  padding-top: 110px;
+  padding-bottom: 2rem;
+}
+
+.trending-category-tabs {
+  display: inline-flex;
+  align-items: center;
+  background-color: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 40px;
+  padding: 5px;
+  gap: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.trending-tab-btn {
+  background: transparent;
+  border: none;
+  color: #b3b3b3;
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 30px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.trending-tab-btn:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.trending-tab-btn.active {
+  background-color: var(--netflix-red);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 3px 12px rgba(229, 9, 20, 0.45);
+}
+
+.trending-genre-pill {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #cccccc;
+  font-size: 0.84rem;
+  font-weight: 500;
+  padding: 7px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.trending-genre-pill:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.trending-genre-pill.active {
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 700;
+  border-color: #ffffff;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.25);
+}
+
+
+

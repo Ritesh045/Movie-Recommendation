@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Node / React Frontend
+node_modules/
+client/node_modules/
+client/dist/
+.vite/
+client/.vite/
+
+# Database & Environment
+.env
+client/.env
+backend/.env
+backend/users.db
+users.db
+
+# ML Generated Binary Models (ignored to stay < 10MB & avoid GitHub 100MB file limit)
+# Note: Models are generated automatically via `python train.py` on build/startup on Render.
+models/*.pkl
+models/*.joblib
+
+# Track Raw & Processed Datasets (needed by train.py on Render)
+!data/raw/*
+!data/processed/*
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
