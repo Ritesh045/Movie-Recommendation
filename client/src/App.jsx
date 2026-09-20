@@ -25,12 +25,26 @@ function App() {
           <main className="flex-grow-1">
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/trending" element={<Trending />} />
-              <Route path="/search" element={<Search />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               
-              {/* Protected Route: Movie details requires authentication */}
+              {/* Protected Routes: Require Authentication */}
+              <Route 
+                path="/trending" 
+                element={
+                  <ProtectedRoute>
+                    <Trending />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/search" 
+                element={
+                  <ProtectedRoute>
+                    <Search />
+                  </ProtectedRoute>
+                } 
+              />
               <Route 
                 path="/movie/:id" 
                 element={

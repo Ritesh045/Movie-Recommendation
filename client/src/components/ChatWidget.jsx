@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Film, Sparkles, Bot } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { MessageSquare, X, Send, Film, Sparkles, Bot, Lock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { sendChatMessage } from '../api';
 import '../styles/chatbot.css';
 
@@ -24,6 +26,18 @@ const ChatWidget = () => {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleFabClick = () => {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: location } });
+      return;
+    }
+    setIsOpen(true);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -93,7 +107,7 @@ const ChatWidget = () => {
       {!isOpen && (
         <button
           className="chat-widget-fab"
-          onClick={() => setIsOpen(true)}
+          onClick={handleFabClick}
           title="Ask CineBot AI"
           aria-label="Open AI Movie Assistant Chat"
         >

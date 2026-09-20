@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Film, Search, LogOut, LogIn } from 'lucide-react';
+import { Film, Search, LogOut, LogIn, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const Navbar = () => {
@@ -50,10 +50,10 @@ const Navbar = () => {
               Home
             </Link>
             <Link to="/trending" className={`nav-link-custom ${location.pathname === '/trending' ? 'active' : ''}`}>
-              🔥 Trending
+              🔥 Trending {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
             </Link>
             <Link to="/search" className={`nav-link-custom ${location.pathname === '/search' ? 'active' : ''}`}>
-              Explore & Search
+              Explore & Search {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
             </Link>
           </div>
         </div>

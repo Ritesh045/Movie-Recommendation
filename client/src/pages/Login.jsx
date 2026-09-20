@@ -18,14 +18,18 @@ import {
 import '../styles/auth.css';
 
 const Login = ({ initialMode = 'login' }) => {
-  const [isFlipped, setIsFlipped] = useState(initialMode === 'signup');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isSignupPath = location.pathname === '/signup' || initialMode === 'signup';
+  const [isFlipped, setIsFlipped] = useState(isSignupPath);
   const [showPassword, setShowPassword] = useState(false);
   const [tiltStyle, setTiltStyle] = useState({});
 
-  // Synchronize flipped state if initialMode prop changes or route changes
+  // Synchronize flipped state whenever route or initialMode changes
   useEffect(() => {
-    setIsFlipped(initialMode === 'signup');
-  }, [initialMode]);
+    setIsFlipped(location.pathname === '/signup' || initialMode === 'signup');
+  }, [location.pathname, initialMode]);
 
   // Login State
   const [loginEmail, setLoginEmail] = useState('');
@@ -41,9 +45,6 @@ const Login = ({ initialMode = 'login' }) => {
   const [signupLoading, setSignupLoading] = useState(false);
 
   const { login, signup } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-
   const fromPath = location.state?.from?.pathname || '/';
 
   // Calculate dynamic password strength
@@ -236,9 +237,8 @@ const Login = ({ initialMode = 'login' }) => {
                 type="button"
                 className="auth-switch-link"
                 onClick={() => {
-                  setIsFlipped(true);
                   setLoginError('');
-                  navigate('/signup', { replace: true });
+                  navigate('/signup');
                 }}
               >
                 Sign up now
@@ -364,9 +364,8 @@ const Login = ({ initialMode = 'login' }) => {
                 type="button"
                 className="auth-switch-link"
                 onClick={() => {
-                  setIsFlipped(false);
                   setSignupError('');
-                  navigate('/login', { replace: true });
+                  navigate('/login');
                 }}
               >
                 Sign In
