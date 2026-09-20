@@ -102,7 +102,11 @@ const Login = ({ initialMode = 'login' }) => {
       await login(loginEmail, loginPassword);
       navigate(fromPath, { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.error || 'Invalid email or password credentials.';
+      console.error('Login API error:', err);
+      const msg = err.response?.data?.error 
+        || (err.code === 'ERR_NETWORK' || !err.response ? 'Unable to reach backend API. Please check your connection or Vercel VITE_API_BASE_URL.' : null)
+        || err.message 
+        || 'Invalid email or password credentials.';
       setLoginError(msg);
     } finally {
       setLoginLoading(false);
@@ -134,7 +138,11 @@ const Login = ({ initialMode = 'login' }) => {
       await signup(signupName, signupEmail, signupPassword);
       navigate(fromPath, { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to create account. Please try again.';
+      console.error('Signup API error:', err);
+      const msg = err.response?.data?.error 
+        || (err.code === 'ERR_NETWORK' || !err.response ? 'Unable to reach backend API. Please check VITE_API_BASE_URL on Vercel.' : null)
+        || err.message 
+        || 'Failed to create account. Please try again.';
       setSignupError(msg);
     } finally {
       setSignupLoading(false);
