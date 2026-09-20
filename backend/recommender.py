@@ -62,13 +62,14 @@ class MovieRecommender:
             lambda g: [] if pd.isna(g) or g == '(no genres listed)' else g.split('|')
         )
 
-        self.title_to_idx = {
-            str(row['clean_title']).lower().strip(): idx for idx, row in self.movies_df.iterrows()
-        }
-        for idx, row in self.movies_df.iterrows():
-            orig_t = str(row['title']).lower().strip()
-            if orig_t not in self.title_to_idx:
-                self.title_to_idx[orig_t] = idx
+        self.title_to_idx = {}
+        for idx, (clean_t, orig_t) in enumerate(zip(self.movies_df['clean_title'], self.movies_df['title'])):
+            c_key = str(clean_t).lower().strip()
+            o_key = str(orig_t).lower().strip()
+            if c_key not in self.title_to_idx:
+                self.title_to_idx[c_key] = idx
+            if o_key not in self.title_to_idx:
+                self.title_to_idx[o_key] = idx
 
         if os.path.exists(tfidf_path):
             tfidf_data = load_pickle(tfidf_path)
@@ -187,7 +188,7 @@ class MovieRecommender:
         ranked = sorted(final_scores.items(), key=lambda x: x[1], reverse=True)[:top_n]
 
         results = []
-        movie_id_map = {row['movieId']: row for _, row in self.movies_df.iterrows()}
+        movie_id_map = {int(row['movieId']): row for row in self.movies_df.to_dict('records')}
 
         for m_id, predicted_score in ranked:
             if m_id in movie_id_map:
@@ -317,7 +318,7 @@ class MovieRecommender:
         top_df = filtered.sort_values(by=['avg_rating', 'vote_count'], ascending=[False, False]).head(top_n)
 
         results = []
-        for _, row in top_df.iterrows():
+        for row in top_df.to_dict('records'):
             results.append({
                 "movieId": int(row['movieId']),
                 "tmdbId": int(row.get('tmdbId', 0)),

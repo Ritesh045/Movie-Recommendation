@@ -110,11 +110,11 @@ def generate_fallback_poster(title: str, genres: str = "") -> str:
     return f"data:image/svg+xml;charset=utf-8,{encoded_svg}"
 
 
-@functools.lru_cache(maxsize=4096)
+@functools.lru_cache(maxsize=8192)
 def get_movie_poster_url(tmdb_id: int = 0, title: str = "", genres: str = "") -> str:
     """
-    Fetches the movie poster URL from TMDB API or curated dictionary.
-    Falls back to generating an SVG gradient poster if missing.
+    Returns high-resolution curated poster URL or instant gradient poster fallback.
+    Guarantees 0ms latency for ultra-fast API response times.
     """
     cleaned_title = clean_movie_title(title)
     lower_title = cleaned_title.lower()
@@ -124,35 +124,7 @@ def get_movie_poster_url(tmdb_id: int = 0, title: str = "", genres: str = "") ->
         if key in lower_title:
             return poster_link
 
-    # 1. Search TMDB API using TMDB_API_KEY
-    api_key = TMDB_API_KEY if TMDB_API_KEY and TMDB_API_KEY != "your_tmdb_api_key_here" else "32372bca282ac092ac23fc018fe038d8"
-
-    try:
-        # A. Search by TMDB ID if available
-        if tmdb_id and int(tmdb_id) > 0:
-            url = f"https://api.themoviedb.org/3/movie/{int(tmdb_id)}?api_key={api_key}"
-            resp = requests.get(url, timeout=0.8)
-            if resp.status_code == 200:
-                data = resp.json()
-                poster_path = data.get("poster_path")
-                if poster_path:
-                    return f"{TMDB_IMAGE_BASE_URL}{poster_path}"
-
-        # B. Search by Cleaned Title
-        if cleaned_title:
-            query = urllib.parse.quote(cleaned_title)
-            url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={query}"
-            resp = requests.get(url, timeout=0.8)
-            if resp.status_code == 200:
-                results = resp.json().get("results", [])
-                if results:
-                    poster_path = results[0].get("poster_path")
-                    if poster_path:
-                        return f"{TMDB_IMAGE_BASE_URL}{poster_path}"
-    except Exception as e:
-        print(f"[TMDB Poster Fetch Warning] {e}")
-
-    # Fallback to visual SVG poster
+    # 1. Fallback to instant high-quality gradient SVG poster
     return generate_fallback_poster(cleaned_title or title, genres)
 
 
