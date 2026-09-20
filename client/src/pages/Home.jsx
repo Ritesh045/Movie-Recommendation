@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Sparkles, LogIn } from 'lucide-react';
 import HeroBanner from '../components/HeroBanner';
 import MovieRow from '../components/MovieRow';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { getHomeContent } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -45,6 +46,14 @@ const Home = () => {
       isMounted = false;
     };
   }, []);
+
+  if (!content) {
+    return (
+      <div style={{ paddingTop: '160px', minHeight: '80vh', backgroundColor: '#141414' }}>
+        <LoadingSpinner text="Loading CineSphere Streaming Catalog..." />
+      </div>
+    );
+  }
 
   const heroMovie = content?.top10?.[0] || null;
 

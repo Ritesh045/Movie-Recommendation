@@ -131,7 +131,7 @@ def get_movie_poster_url(tmdb_id: int = 0, title: str = "", genres: str = "") ->
         # A. Search by TMDB ID if available
         if tmdb_id and int(tmdb_id) > 0:
             url = f"https://api.themoviedb.org/3/movie/{int(tmdb_id)}?api_key={api_key}"
-            resp = requests.get(url, timeout=3.0)
+            resp = requests.get(url, timeout=0.8)
             if resp.status_code == 200:
                 data = resp.json()
                 poster_path = data.get("poster_path")
@@ -142,7 +142,7 @@ def get_movie_poster_url(tmdb_id: int = 0, title: str = "", genres: str = "") ->
         if cleaned_title:
             query = urllib.parse.quote(cleaned_title)
             url = f"https://api.themoviedb.org/3/search/movie?api_key={api_key}&query={query}"
-            resp = requests.get(url, timeout=3.0)
+            resp = requests.get(url, timeout=0.8)
             if resp.status_code == 200:
                 results = resp.json().get("results", [])
                 if results:
