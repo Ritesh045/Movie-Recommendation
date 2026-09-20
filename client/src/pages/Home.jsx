@@ -53,45 +53,48 @@ const Home = () => {
       <HeroBanner movies={content?.top10} movie={heroMovie} />
       
       {!isAuthenticated && (
-        <div className="container mt-4 mb-2">
-          <div 
-            className="p-3 p-md-4 rounded-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 shadow-lg"
-            style={{
-              background: 'linear-gradient(135deg, rgba(229, 9, 20, 0.22) 0%, rgba(18, 18, 24, 0.9) 100%)',
-              backdropFilter: 'blur(16px)',
-              border: '1px solid rgba(229, 9, 20, 0.4)',
-            }}
-          >
-            <div className="d-flex align-items-center gap-3">
-              <div 
-                className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
-                style={{ width: '46px', height: '46px', backgroundColor: 'rgba(229, 9, 20, 0.25)', color: '#e50914' }}
-              >
-                <Sparkles size={24} />
-              </div>
-              <div>
-                <h5 className="text-white fw-bold mb-1" style={{ fontSize: '1.05rem' }}>
-                  Previewing CineSphere Streaming Catalog
-                </h5>
-                <p className="text-secondary mb-0" style={{ fontSize: '0.88rem' }}>
-                  Sign in or create a free account to watch movies, access AI recommendations, and chat with CineBot.
-                </p>
-              </div>
+        <div 
+          className="position-fixed bottom-0 start-50 translate-middle-x mb-4 px-3 px-md-4 py-3 rounded-4 d-flex flex-column flex-md-row align-items-center justify-content-between gap-3 shadow-lg"
+          style={{
+            width: '92%',
+            maxWidth: '960px',
+            zIndex: 9999,
+            background: 'rgba(16, 16, 22, 0.92)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(229, 9, 20, 0.45)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(229, 9, 20, 0.25)',
+          }}
+        >
+          <div className="d-flex align-items-center gap-3">
+            <div 
+              className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+              style={{ width: '42px', height: '42px', backgroundColor: 'rgba(229, 9, 20, 0.25)', color: '#e50914' }}
+            >
+              <Sparkles size={22} />
             </div>
-            <div className="d-flex align-items-center gap-2 flex-shrink-0">
-              <Link to="/login" className="btn btn-outline-light btn-sm fw-semibold px-3 py-2 rounded-3">
-                Sign In
-              </Link>
-              <Link to="/signup" className="btn btn-danger btn-sm fw-bold px-3 py-2 d-flex align-items-center gap-1 rounded-3" style={{ backgroundColor: '#e50914', borderColor: '#e50914' }}>
-                <LogIn size={16} />
-                Create Account
-              </Link>
+            <div>
+              <h6 className="text-white fw-bold mb-0" style={{ fontSize: '0.98rem' }}>
+                Previewing CineSphere Streaming Catalog
+              </h6>
+              <p className="text-secondary mb-0" style={{ fontSize: '0.82rem' }}>
+                Sign in or create a free account to watch movies, get AI recommendations, and chat with CineBot.
+              </p>
             </div>
+          </div>
+          <div className="d-flex align-items-center gap-2 flex-shrink-0">
+            <Link to="/login" className="btn btn-outline-light btn-sm fw-semibold px-3 py-1-5 rounded-3" style={{ fontSize: '0.85rem' }}>
+              Sign In
+            </Link>
+            <Link to="/signup" className="btn btn-danger btn-sm fw-bold px-3 py-1-5 d-flex align-items-center gap-1 rounded-3" style={{ backgroundColor: '#e50914', borderColor: '#e50914', fontSize: '0.85rem' }}>
+              <LogIn size={15} />
+              Create Account
+            </Link>
           </div>
         </div>
       )}
 
-      <div style={{ marginTop: isAuthenticated ? '-40px' : '0px', position: 'relative', zIndex: 10 }}>
+      <div style={{ marginTop: '-40px', position: 'relative', zIndex: 10 }}>
         {content?.top10?.length > 0 && (
           <MovieRow 
             title="🏆 Top 10 Movies & Shows Today" 
