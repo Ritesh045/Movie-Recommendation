@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Film, 
@@ -12,7 +12,6 @@ import {
   AlertCircle, 
   Sparkles,
   ShieldCheck,
-  CheckCircle2,
   Zap
 } from 'lucide-react';
 import '../styles/auth.css';
@@ -21,23 +20,17 @@ const Login = ({ initialMode = 'login' }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isSignupPath = location.pathname === '/signup' || initialMode === 'signup';
-  const [isFlipped, setIsFlipped] = useState(isSignupPath);
+  const isSignup = location.pathname === '/signup' || initialMode === 'signup';
   const [showPassword, setShowPassword] = useState(false);
   const [tiltStyle, setTiltStyle] = useState({});
 
-  // Synchronize flipped state whenever route or initialMode changes
-  useEffect(() => {
-    setIsFlipped(location.pathname === '/signup' || initialMode === 'signup');
-  }, [location.pathname, initialMode]);
-
-  // Login State
+  // Login Form State
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Signup State
+  // Signup Form State
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
@@ -47,7 +40,7 @@ const Login = ({ initialMode = 'login' }) => {
   const { login, signup } = useAuth();
   const fromPath = location.state?.from?.pathname || '/';
 
-  // Calculate dynamic password strength
+  // Dynamic Password Strength Meter
   const getPasswordStrength = (pass) => {
     if (!pass) return { score: 0, label: '', color: 'transparent' };
     if (pass.length < 6) return { score: 1, label: 'Weak (min 6 characters)', color: '#ff4d4d' };
@@ -57,7 +50,7 @@ const Login = ({ initialMode = 'login' }) => {
 
   const passStrength = getPasswordStrength(signupPassword);
 
-  // 3D Mouse Tilt Handler
+  // 3D Mouse Tilt Effect
   const handleMouseMove = (e) => {
     const card = e.currentTarget;
     const rect = card.getBoundingClientRect();
@@ -66,11 +59,11 @@ const Login = ({ initialMode = 'login' }) => {
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    const rotateX = ((y - centerY) / centerY) * -10;
-    const rotateY = ((x - centerX) / centerX) * 10;
+    const rotateX = ((y - centerY) / centerY) * -6;
+    const rotateY = ((x - centerX) / centerX) * 6;
 
     setTiltStyle({
-      transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`,
+      transform: `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.01, 1.01, 1.01)`,
     });
   };
 
@@ -84,7 +77,7 @@ const Login = ({ initialMode = 'login' }) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
-  // Submit Login
+  // Submit Sign In
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setLoginError('');
@@ -116,7 +109,7 @@ const Login = ({ initialMode = 'login' }) => {
     }
   };
 
-  // Submit Signup
+  // Submit Create Account
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
     setSignupError('');
@@ -154,225 +147,210 @@ const Login = ({ initialMode = 'login' }) => {
       <div className="auth-blob auth-blob-1"></div>
       <div className="auth-blob auth-blob-2"></div>
 
-      {/* 3D Perspective Card Container */}
       <div className="auth-3d-wrapper">
         <div
-          className={`auth-card-flipper ${isFlipped ? 'is-flipped' : ''}`}
+          className="auth-card-flipper"
           style={tiltStyle}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
         >
-          {/* FRONT FACE: SIGN IN */}
-          <div className="auth-glass-card">
-            <div className="auth-brand-logo">
-              <Film size={32} color="#e50914" />
-              <span>CineSphere</span>
-            </div>
-
-            <h2 className="auth-header-title">Sign In</h2>
-            <p className="auth-header-subtitle">
-              Enter your credentials to access your streaming recommendations.
-            </p>
-
-            {loginError && (
-              <div className="auth-error-alert">
-                <AlertCircle size={16} />
-                <span>{loginError}</span>
+          {isSignup ? (
+            /* CREATE ACCOUNT (SIGN UP) CARD */
+            <div className="auth-glass-card">
+              <div className="auth-brand-logo">
+                <Film size={32} color="#e50914" />
+                <span>CineSphere</span>
               </div>
-            )}
 
-            <form onSubmit={handleLoginSubmit}>
-              <div className="auth-input-group">
-                <label className="auth-input-label">Email Address</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type="email"
-                    className="auth-input-field"
-                    placeholder="name@example.com"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    required
-                  />
-                  <Mail size={18} className="auth-input-icon" />
+              <h2 className="auth-header-title">Create Account</h2>
+              <p className="auth-header-subtitle">
+                Join CineSphere to unlock personalized AI movie recommendations.
+              </p>
+
+              {/* Feature Badges */}
+              <div className="auth-perks-badges">
+                <span className="auth-perk-pill">
+                  <Zap size={12} /> Unlimited Recommendations
+                </span>
+                <span className="auth-perk-pill">
+                  <ShieldCheck size={12} /> 100% Free Access
+                </span>
+              </div>
+
+              {signupError && (
+                <div className="auth-error-alert">
+                  <AlertCircle size={16} />
+                  <span>{signupError}</span>
                 </div>
-              </div>
+              )}
 
-              <div className="auth-input-group">
-                <label className="auth-input-label">Password</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="auth-input-field"
-                    placeholder="••••••••"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    required
-                  />
-                  <Lock size={18} className="auth-input-icon" />
-                  <button
-                    type="button"
-                    className="auth-password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              <button type="submit" className="auth-btn-submit" disabled={loginLoading}>
-                {loginLoading ? (
-                  <span>Signing In...</span>
-                ) : (
-                  <>
-                    <span>Sign In</span>
-                    <ArrowRight size={18} />
-                  </>
-                )}
-              </button>
-            </form>
-
-            <div className="auth-switch-text">
-              New to CineSphere?
-              <button
-                type="button"
-                className="auth-switch-link"
-                onClick={() => {
-                  setLoginError('');
-                  navigate('/signup');
-                }}
-              >
-                Sign up now
-              </button>
-            </div>
-          </div>
-
-          {/* BACK FACE: CREATE ACCOUNT (SIGN UP) */}
-          <div className="auth-glass-card back-face">
-            <div className="auth-brand-logo">
-              <Film size={32} color="#e50914" />
-              <span>CineSphere</span>
-            </div>
-
-            <h2 className="auth-header-title">Create Account</h2>
-            <p className="auth-header-subtitle">
-              Join CineSphere to unlock personalized AI movie recommendations.
-            </p>
-
-            {/* Feature Perks Badges */}
-            <div className="auth-perks-badges">
-              <span className="auth-perk-pill">
-                <Zap size={12} /> Unlimited Recommendations
-              </span>
-              <span className="auth-perk-pill">
-                <ShieldCheck size={12} /> 100% Free Access
-              </span>
-            </div>
-
-            {signupError && (
-              <div className="auth-error-alert">
-                <AlertCircle size={16} />
-                <span>{signupError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSignupSubmit}>
-              <div className="auth-input-group">
-                <label className="auth-input-label">Full Name</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type="text"
-                    className="auth-input-field"
-                    placeholder="John Doe"
-                    value={signupName}
-                    onChange={(e) => setSignupName(e.target.value)}
-                    required
-                  />
-                  <UserIcon size={18} className="auth-input-icon" />
-                </div>
-              </div>
-
-              <div className="auth-input-group">
-                <label className="auth-input-label">Email Address</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type="email"
-                    className="auth-input-field"
-                    placeholder="name@example.com"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    required
-                  />
-                  <Mail size={18} className="auth-input-icon" />
-                </div>
-              </div>
-
-              <div className="auth-input-group">
-                <label className="auth-input-label">Password</label>
-                <div className="auth-input-wrapper">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="auth-input-field"
-                    placeholder="At least 6 characters"
-                    value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    required
-                  />
-                  <Lock size={18} className="auth-input-icon" />
-                  <button
-                    type="button"
-                    className="auth-password-toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-
-                {/* Dynamic Password Strength Indicator */}
-                {signupPassword && (
-                  <div className="auth-password-meter">
-                    <div className="auth-meter-bar-track">
-                      <div
-                        className="auth-meter-bar-fill"
-                        style={{
-                          width: `${(passStrength.score / 3) * 100}%`,
-                          backgroundColor: passStrength.color
-                        }}
-                      />
-                    </div>
-                    <span className="auth-meter-label" style={{ color: passStrength.color }}>
-                      {passStrength.label}
-                    </span>
+              <form onSubmit={handleSignupSubmit}>
+                <div className="auth-input-group">
+                  <label className="auth-input-label">Full Name</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      type="text"
+                      className="auth-input-field"
+                      placeholder="John Doe"
+                      value={signupName}
+                      onChange={(e) => setSignupName(e.target.value)}
+                      required
+                    />
+                    <UserIcon size={18} className="auth-input-icon" />
                   </div>
-                )}
+                </div>
+
+                <div className="auth-input-group">
+                  <label className="auth-input-label">Email Address</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      type="email"
+                      className="auth-input-field"
+                      placeholder="name@example.com"
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                      required
+                    />
+                    <Mail size={18} className="auth-input-icon" />
+                  </div>
+                </div>
+
+                <div className="auth-input-group">
+                  <label className="auth-input-label">Password</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="auth-input-field"
+                      placeholder="At least 6 characters"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      required
+                    />
+                    <Lock size={18} className="auth-input-icon" />
+                    <button
+                      type="button"
+                      className="auth-password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+
+                  {signupPassword && (
+                    <div className="auth-password-meter">
+                      <div className="auth-meter-bar-track">
+                        <div
+                          className="auth-meter-bar-fill"
+                          style={{
+                            width: `${(passStrength.score / 3) * 100}%`,
+                            backgroundColor: passStrength.color
+                          }}
+                        />
+                      </div>
+                      <span className="auth-meter-label" style={{ color: passStrength.color }}>
+                        {passStrength.label}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" className="auth-btn-submit" disabled={signupLoading}>
+                  {signupLoading ? (
+                    <span>Creating Account...</span>
+                  ) : (
+                    <>
+                      <span>Create Account</span>
+                      <Sparkles size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="auth-switch-text">
+                Already have an account?
+                <Link to="/login" className="auth-switch-link">
+                  Sign In
+                </Link>
+              </div>
+            </div>
+          ) : (
+            /* SIGN IN CARD */
+            <div className="auth-glass-card">
+              <div className="auth-brand-logo">
+                <Film size={32} color="#e50914" />
+                <span>CineSphere</span>
               </div>
 
-              <button type="submit" className="auth-btn-submit" disabled={signupLoading}>
-                {signupLoading ? (
-                  <span>Creating Account...</span>
-                ) : (
-                  <>
-                    <span>Create Account</span>
-                    <Sparkles size={18} />
-                  </>
-                )}
-              </button>
-            </form>
+              <h2 className="auth-header-title">Sign In</h2>
+              <p className="auth-header-subtitle">
+                Enter your credentials to access your streaming recommendations.
+              </p>
 
-            <div className="auth-switch-text">
-              Already have an account?
-              <button
-                type="button"
-                className="auth-switch-link"
-                onClick={() => {
-                  setSignupError('');
-                  navigate('/login');
-                }}
-              >
-                Sign In
-              </button>
+              {loginError && (
+                <div className="auth-error-alert">
+                  <AlertCircle size={16} />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleLoginSubmit}>
+                <div className="auth-input-group">
+                  <label className="auth-input-label">Email Address</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      type="email"
+                      className="auth-input-field"
+                      placeholder="name@example.com"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      required
+                    />
+                    <Mail size={18} className="auth-input-icon" />
+                  </div>
+                </div>
+
+                <div className="auth-input-group">
+                  <label className="auth-input-label">Password</label>
+                  <div className="auth-input-wrapper">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      className="auth-input-field"
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      required
+                    />
+                    <Lock size={18} className="auth-input-icon" />
+                    <button
+                      type="button"
+                      className="auth-password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button type="submit" className="auth-btn-submit" disabled={loginLoading}>
+                  {loginLoading ? (
+                    <span>Signing In...</span>
+                  ) : (
+                    <>
+                      <span>Sign In</span>
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="auth-switch-text">
+                New to CineSphere?
+                <Link to="/signup" className="auth-switch-link">
+                  Sign up now
+                </Link>
+              </div>
             </div>
-          </div>
-
+          )}
         </div>
       </div>
     </div>
