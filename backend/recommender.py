@@ -30,7 +30,7 @@ class MovieRecommender:
     def __init__(self):
         self.movies_df = None
         self.tfidf_vectorizer = None
-        self.content_similarity = None
+        self.tfidf_matrix = None
         self.svd_item_features = None
         self.user_item_matrix = None
         self.user_sim_df = None
@@ -41,12 +41,11 @@ class MovieRecommender:
     def load_models(self):
         """Loads processed data and precomputed ML models from models/ directory."""
         movies_path = os.path.join(PROCESSED_DIR, "movies_processed.csv")
-        tfidf_path = os.path.join(MODELS_DIR, "tfidf_vectorizer.pkl")
-        sim_path = os.path.join(MODELS_DIR, "content_similarity.pkl")
+        tfidf_path = os.path.join(MODELS_DIR, "tfidf_model.pkl")
         svd_path = os.path.join(MODELS_DIR, "svd_model.pkl")
         collab_path = os.path.join(MODELS_DIR, "user_collaborative.pkl")
 
-        if not os.path.exists(sim_path) or not os.path.exists(movies_path):
+        if not os.path.exists(tfidf_path) or not os.path.exists(movies_path):
             print("[INFO] Model artifacts or processed dataset not found. Triggering auto-training pipeline...")
             try:
                 from train import train_pipeline
@@ -71,10 +70,14 @@ class MovieRecommender:
             if orig_t not in self.title_to_idx:
                 self.title_to_idx[orig_t] = idx
 
-        if os.path.exists(sim_path):
-            self.content_similarity = load_pickle(sim_path)
         if os.path.exists(tfidf_path):
-            self.tfidf_vectorizer = load_pickle(tfidf_path)
+            tfidf_data = load_pickle(tfidf_path)
+            if isinstance(tfidf_data, dict):
+                self.tfidf_vectorizer = tfidf_data.get('vectorizer')
+                self.tfidf_matrix = tfidf_data.get('tfidf_matrix')
+            else:
+                self.tfidf_vectorizer = tfidf_data
+
         if os.path.exists(svd_path):
             svd_data = load_pickle(svd_path)
             self.svd_item_features = svd_data.get('item_features')
@@ -105,9 +108,11 @@ class MovieRecommender:
         return -1
 
     def get_content_scores(self, movie_idx: int) -> np.ndarray:
-        """Retrieves Content-Based similarity scores (TF-IDF Cosine Similarity) for a target movie."""
-        if self.content_similarity is not None and movie_idx < len(self.content_similarity):
-            return self.content_similarity[movie_idx].copy()
+        """Retrieves Content-Based similarity scores (TF-IDF Cosine Similarity) for a target movie dynamically."""
+        if self.tfidf_matrix is not None and movie_idx < self.tfidf_matrix.shape[0]:
+            target_vec = self.tfidf_matrix[movie_idx]
+            sim_scores = cosine_similarity(target_vec, self.tfidf_matrix)[0]
+            return sim_scores
         return np.zeros(len(self.movies_df))
 
     def get_collaborative_scores(self, movie_idx: int) -> np.ndarray:

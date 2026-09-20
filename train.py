@@ -38,8 +38,8 @@ def train_pipeline():
 
     os.makedirs(MODELS_DIR, exist_ok=True)
 
-    # 2. Content-Based Filtering: TF-IDF + Cosine Similarity
-    print("\n[STEP 2/4] Building Content-Based Model (TF-IDF + Cosine Similarity)...")
+    # 2. Content-Based Filtering: TF-IDF Sparse Matrix (Ultra-Low Memory)
+    print("\n[STEP 2/4] Building Content-Based Model (TF-IDF Sparse Matrix)...")
     vectorizer = TfidfVectorizer(
         max_features=5000,
         stop_words='english',
@@ -50,12 +50,11 @@ def train_pipeline():
     tfidf_matrix = vectorizer.fit_transform(corpus)
     print(f" -> TF-IDF Matrix shape: {tfidf_matrix.shape}")
 
-    print(" -> Computing Content Cosine Similarity Matrix...")
-    content_sim_matrix = cosine_similarity(tfidf_matrix, tfidf_matrix).astype(np.float32)
-    print(f" -> Similarity Matrix shape: {content_sim_matrix.shape}")
-
-    save_pickle(vectorizer, os.path.join(MODELS_DIR, "tfidf_vectorizer.pkl"))
-    save_pickle(content_sim_matrix, os.path.join(MODELS_DIR, "content_similarity.pkl"))
+    tfidf_artifact = {
+        'vectorizer': vectorizer,
+        'tfidf_matrix': tfidf_matrix
+    }
+    save_pickle(tfidf_artifact, os.path.join(MODELS_DIR, "tfidf_model.pkl"))
 
     # 3. User-Based Collaborative Filtering Matrix
     print("\n[STEP 3/4] Building User-Based Collaborative Matrix & Cosine Similarity...")
