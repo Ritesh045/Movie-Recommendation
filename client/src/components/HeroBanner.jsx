@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Info, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import VideoModal from './VideoModal';
 
 const formatTitle = (title) => {
   if (!title) return '';
@@ -16,6 +17,7 @@ const HeroBanner = ({ movie, movies = [] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [animKey, setAnimKey] = useState(0);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     if (movieList.length <= 1 || isPaused) return;
@@ -95,17 +97,27 @@ const HeroBanner = ({ movie, movies = [] }) => {
         <p className="hero-overview">
           {currentMovie.corpus || `Experience '${displayTitle}' — a top-rated fan favorite featuring exceptional story and direction.`}
         </p>
-        <div className="d-flex align-items-center mt-3">
-          <Link to={`/movie/${currentMovie.movieId}`} className="btn-hero-play">
+        <div className="d-flex align-items-center mt-3 gap-2">
+          <button 
+            type="button"
+            className="btn-hero-play border-0 cursor-pointer" 
+            onClick={() => setIsModalOpen(true)}
+          >
             <Play size={20} fill="#000000" />
-            Watch Now
-          </Link>
+            Watch Now (Live Stream)
+          </button>
           <Link to={`/movie/${currentMovie.movieId}`} className="btn-hero-info">
             <Info size={20} />
             More Info & Recommendations
           </Link>
         </div>
       </div>
+
+      <VideoModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        movie={currentMovie} 
+      />
 
       {/* Slide Indicators / Dots */}
       {movieList.length > 1 && (

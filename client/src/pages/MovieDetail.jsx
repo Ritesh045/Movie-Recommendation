@@ -4,7 +4,8 @@ import { getMovieDetail, getRecommendations } from '../api';
 import MovieCard from '../components/MovieCard';
 import RecommendationModeToggle from '../components/RecommendationModeToggle';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { Star, Tag, Lightbulb } from 'lucide-react';
+import VideoModal from '../components/VideoModal';
+import { Star, Tag, Lightbulb, Play, Sparkles } from 'lucide-react';
 
 const MovieDetail = () => {
   const { id } = useParams();
@@ -14,6 +15,7 @@ const MovieDetail = () => {
   const [contentWeight, setContentWeight] = useState(0.6);
   const [loadingMovie, setLoadingMovie] = useState(true);
   const [loadingRecs, setLoadingRecs] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Fetch movie details
   useEffect(() => {
@@ -109,6 +111,21 @@ const MovieDetail = () => {
                 {movie.corpus || `Discover detailed metrics and recommendations for '${movie.clean_title}'.`}
               </p>
 
+              <div className="d-flex align-items-center gap-3 my-3">
+                <button 
+                  className="btn btn-danger btn-lg fw-bold px-4 py-2 rounded-3 d-flex align-items-center gap-2 shadow"
+                  style={{ backgroundColor: '#e50914', borderColor: '#e50914' }}
+                  onClick={() => setIsModalOpen(true)}
+                >
+                  <Play size={22} fill="#ffffff" color="#ffffff" />
+                  Watch Movie (Live HD Stream)
+                </button>
+                <span className="badge bg-dark border border-danger text-danger px-3 py-2 rounded-3 d-flex align-items-center gap-1">
+                  <Sparkles size={14} />
+                  Live Stream Ready
+                </span>
+              </div>
+
               {movie.user_tags && (
                 <div className="d-flex align-items-center text-secondary small">
                   <Tag size={16} className="me-2 text-danger" />
@@ -119,6 +136,12 @@ const MovieDetail = () => {
           </div>
         </div>
       </div>
+
+      <VideoModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        movie={movie} 
+      />
 
       {/* Recommendations Section */}
       <div className="container my-5">
