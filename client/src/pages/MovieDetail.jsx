@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { getMovieDetail, getRecommendations } from '../api';
+import { getMovieDetail, getRecommendations, getTrendingMovies } from '../api';
 import MovieCard from '../components/MovieCard';
 import RecommendationModeToggle from '../components/RecommendationModeToggle';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -50,7 +50,7 @@ const MovieDetail = () => {
     const cacheKey = `${mode}_${Number(contentWeight).toFixed(2)}`;
 
     // 1. Instant Cache Hit (0ms)
-    if (recsCacheRef.current[cacheKey]) {
+    if (recsCacheRef.current[cacheKey] && recsCacheRef.current[cacheKey].length > 0) {
       setRecommendations(recsCacheRef.current[cacheKey]);
       setLoadingRecs(false);
       setIsUpdatingRecs(false);
@@ -69,8 +69,13 @@ const MovieDetail = () => {
 
         const recs = await getRecommendations(id, mode, contentWeight, 'All', 0.0, 10);
         if (isMounted) {
-          recsCacheRef.current[cacheKey] = recs || [];
-          setRecommendations(recs || []);
+          let finalRecs = recs;
+          if (!finalRecs || finalRecs.length === 0) {
+            finalRecs = await getTrendingMovies(10);
+          }
+
+          recsCacheRef.current[cacheKey] = finalRecs || [];
+          setRecommendations(finalRecs || []);
 
           // Background Prefetch other modes so menu switching is 100% instant
           const modesToPrefetch = ['hybrid', 'content', 'collaborative'].filter(m => m !== mode);
@@ -79,7 +84,7 @@ const MovieDetail = () => {
             if (!recsCacheRef.current[mKey]) {
               try {
                 const prefetched = await getRecommendations(id, m, contentWeight, 'All', 0.0, 10);
-                if (isMounted && prefetched) {
+                if (isMounted && prefetched && prefetched.length > 0) {
                   recsCacheRef.current[mKey] = prefetched;
                 }
               } catch (_) {
@@ -90,6 +95,13 @@ const MovieDetail = () => {
         }
       } catch (err) {
         console.error('Failed to fetch recommendations:', err);
+        try {
+          const fallback = await getTrendingMovies(10);
+          if (isMounted && fallback && fallback.length > 0) {
+            recsCacheRef.current[cacheKey] = fallback;
+            setRecommendations(fallback);
+          }
+        } catch (_) {}
       } finally {
         if (isMounted) {
           setLoadingRecs(false);
@@ -165,7 +177,7 @@ const MovieDetail = () => {
 
               {/* Interactive Like, Save / My List, and 5-Star Rating Feedback Bar */}
               <MovieInteractionBar 
-                movieId={id} 
+                movieId={movie.movieId || id} 
                 onInteractionChange={() => setRecRefreshKey(k => k + 1)} 
               />
 
@@ -216,7 +228,16 @@ const MovieDetail = () => {
             </div>
           </div>
         ) : (
-          <div className="text-secondary py-4">No recommendations found matching your criteria.</div>
+          <div className="text-secondary py-5 text-center">
+            <p className="mb-3">Generating suggestions for this movie...</p>
+            <button
+              type="button"
+              className="btn btn-outline-danger btn-sm rounded-pill px-4"
+              onClick={() => setRecRefreshKey(k => k + 1)}
+            >
+              🔄 Refresh Recommendations
+            </button>
+          </div>
         )}
       </div>
     </div>

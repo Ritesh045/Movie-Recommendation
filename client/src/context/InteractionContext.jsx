@@ -61,7 +61,10 @@ export const InteractionProvider = ({ children }) => {
   const isDisliked = useCallback((movieId) => dislikedIds.has(Number(movieId)), [dislikedIds]);
   const isSaved = useCallback((movieId) => savedIds.has(Number(movieId)), [savedIds]);
   const isInWishlist = isSaved;
-  const getRating = useCallback((movieId) => ratingsMap[Number(movieId)] || null, [ratingsMap]);
+  const getRating = useCallback((movieId) => {
+    const num = Number(movieId);
+    return ratingsMap[num] ?? ratingsMap[String(num)] ?? ratingsMap[String(movieId)] ?? null;
+  }, [ratingsMap]);
 
   // YouTube-style Like: clears Dislike if active
   const toggleLike = async (movieId) => {

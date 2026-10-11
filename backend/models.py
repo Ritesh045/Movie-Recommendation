@@ -38,6 +38,7 @@ class User(db.Model):
 
 class UserRating(db.Model):
     __tablename__ = 'user_ratings'
+    __table_args__ = (db.UniqueConstraint('user_id', 'movie_id', name='uq_user_movie_rating'),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -57,6 +58,7 @@ class UserRating(db.Model):
 
 class UserLike(db.Model):
     __tablename__ = 'user_likes'
+    __table_args__ = (db.UniqueConstraint('user_id', 'movie_id', name='uq_user_movie_like'),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -74,6 +76,7 @@ class UserLike(db.Model):
 
 class UserSaved(db.Model):
     __tablename__ = 'user_saved'
+    __table_args__ = (db.UniqueConstraint('user_id', 'movie_id', name='uq_user_movie_saved'),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -91,6 +94,7 @@ class UserSaved(db.Model):
 
 class UserDislike(db.Model):
     __tablename__ = 'user_dislikes'
+    __table_args__ = (db.UniqueConstraint('user_id', 'movie_id', name='uq_user_movie_dislike'),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)

@@ -325,22 +325,45 @@ def get_movies_by_genre(genre_name: str):
     return jsonify(results)
 
 
+def get_canonical_movie_id(id_val: int) -> int:
+    """
+    Resolves an ID (whether internal MovieLens movieId or TMDB tmdbId)
+    to the canonical movieId in recommender.movies_df.
+    """
+    if recommender.is_loaded and recommender.movies_df is not None:
+        if id_val in recommender.movie_id_to_idx:
+            return id_val
+        if hasattr(recommender, 'tmdb_id_to_idx') and id_val in recommender.tmdb_id_to_idx:
+            idx = recommender.tmdb_id_to_idx[id_val]
+            if recommender.movies_records:
+                return int(recommender.movies_records[idx]['movieId'])
+            return int(recommender.movies_df.iloc[idx]['movieId'])
+    return id_val
+
+
 @app.route('/api/movies/<int:movie_id>', methods=['GET'])
-@jwt_required()
+@jwt_required(optional=True)
 def get_movie_detail(movie_id: int):
-    """Returns detailed metadata for a specific movie by ID (Requires Auth)."""
+    """Returns detailed metadata for a specific movie by ID."""
     if not recommender.is_loaded:
         return jsonify({"error": "Models not loaded"}), 500
     
+    mid = get_canonical_movie_id(movie_id)
     df = recommender.movies_df
-    matched = df[df['movieId'] == movie_id]
+    matched = df[df['movieId'] == mid]
+    if matched.empty and 'tmdbId' in df.columns:
+        matched = df[df['tmdbId'] == movie_id]
     
     if matched.empty:
         return jsonify({"error": "Movie not found"}), 404
     
     row = matched.iloc[0]
+    canonical_mid = int(row['movieId'])
+    likes_count = UserLike.query.filter_by(movie_id=canonical_mid).count()
+    dislikes_count = UserDislike.query.filter_by(movie_id=canonical_mid).count()
+
     detail = {
-        "movieId": int(row['movieId']),
+        "movieId": canonical_mid,
         "tmdbId": int(row.get('tmdbId', 0)),
         "clean_title": row['clean_title'],
         "title": row['title'],
@@ -350,7 +373,9 @@ def get_movie_detail(movie_id: int):
         "avg_rating": float(row['avg_rating']),
         "vote_count": int(row['vote_count']),
         "user_tags": row.get('user_tags', ''),
-        "corpus": row.get('corpus', '')
+        "corpus": row.get('corpus', ''),
+        "likes_count": likes_count,
+        "dislikes_count": dislikes_count
     }
     return jsonify(enrich_movie_item(detail))
 
@@ -360,24 +385,39 @@ def get_movie_detail(movie_id: int):
 def get_movie_interaction(movie_id: int):
     """
     GET /api/movies/<id>/interaction
-    Returns current user's interaction state: is_liked, is_disliked, is_saved (Wishlist), and user_rating.
+    Returns current user's interaction state AND total public likes/dislikes counts.
+    Visible to all visitors (both authenticated users and guests).
     """
+    mid = get_canonical_movie_id(movie_id)
+    likes_count = UserLike.query.filter_by(movie_id=mid).count()
+    dislikes_count = UserDislike.query.filter_by(movie_id=mid).count()
+
     user_id = get_jwt_identity()
     if not user_id:
-        return jsonify({"is_liked": False, "is_disliked": False, "is_saved": False, "user_rating": None})
+        return jsonify({
+            "movieId": mid,
+            "is_liked": False,
+            "is_disliked": False,
+            "is_saved": False,
+            "user_rating": None,
+            "likes_count": likes_count,
+            "dislikes_count": dislikes_count
+        })
 
     uid = int(user_id)
-    is_liked = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
-    is_disliked = UserDislike.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
-    is_saved = UserSaved.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
-    rating_record = UserRating.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    is_liked = UserLike.query.filter_by(user_id=uid, movie_id=mid).first() is not None
+    is_disliked = UserDislike.query.filter_by(user_id=uid, movie_id=mid).first() is not None
+    is_saved = UserSaved.query.filter_by(user_id=uid, movie_id=mid).first() is not None
+    rating_record = UserRating.query.filter_by(user_id=uid, movie_id=mid).first()
 
     return jsonify({
-        "movieId": movie_id,
+        "movieId": mid,
         "is_liked": is_liked,
         "is_disliked": is_disliked,
         "is_saved": is_saved,
-        "user_rating": rating_record.rating if rating_record else None
+        "user_rating": rating_record.rating if rating_record else None,
+        "likes_count": likes_count,
+        "dislikes_count": dislikes_count
     })
 
 
@@ -388,31 +428,45 @@ def toggle_movie_like(movie_id: int):
     POST /api/movies/<id>/like
     Toggles Like (YouTube-style):
     - If previously Disliked, automatically clears Dislike.
-    - Toggles Like on/off.
+    - Toggles Like on/off (exactly 1 like per user max).
+    - Returns updated public counts.
     """
+    mid = get_canonical_movie_id(movie_id)
     uid = int(get_jwt_identity())
-    existing_like = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first()
-    existing_dislike = UserDislike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    
+    # Remove any existing dislikes for this user and movie
+    existing_dislikes = UserDislike.query.filter_by(user_id=uid, movie_id=mid).all()
+    for d in existing_dislikes:
+        db.session.delete(d)
 
-    if existing_dislike:
-        db.session.delete(existing_dislike)
-
-    if existing_like:
-        db.session.delete(existing_like)
+    # Check and toggle existing likes cleanly
+    existing_likes = UserLike.query.filter_by(user_id=uid, movie_id=mid).all()
+    if existing_likes:
+        for l in existing_likes:
+            db.session.delete(l)
         is_liked = False
         msg = "Like removed."
     else:
-        new_like = UserLike(user_id=uid, movie_id=movie_id)
+        new_like = UserLike(user_id=uid, movie_id=mid)
         db.session.add(new_like)
         is_liked = True
         msg = "👍 Liked! Boosting this title and similar movies in your recommendations."
 
     db.session.commit()
 
+    likes_count = UserLike.query.filter_by(movie_id=mid).count()
+    dislikes_count = UserDislike.query.filter_by(movie_id=mid).count()
+
+    # Clear personalized cache so recommendations adapt
+    if hasattr(recommender, '_personalized_cache'):
+        recommender._personalized_cache = {}
+
     return jsonify({
-        "movieId": movie_id,
+        "movieId": mid,
         "is_liked": is_liked,
         "is_disliked": False,
+        "likes_count": likes_count,
+        "dislikes_count": dislikes_count,
         "message": msg
     })
 
@@ -424,32 +478,44 @@ def toggle_movie_dislike(movie_id: int):
     POST /api/movies/<id>/dislike
     Toggles Dislike (YouTube-style):
     - If previously Liked, automatically clears Like.
-    - Toggles Dislike on/off.
-    - Disliking heavily downranks similar themes in Content & Collaborative models.
+    - Toggles Dislike on/off (exactly 1 dislike per user max).
+    - Returns updated public counts.
     """
+    mid = get_canonical_movie_id(movie_id)
     uid = int(get_jwt_identity())
-    existing_like = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first()
-    existing_dislike = UserDislike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    
+    # Remove any existing likes for this user and movie
+    existing_likes = UserLike.query.filter_by(user_id=uid, movie_id=mid).all()
+    for l in existing_likes:
+        db.session.delete(l)
 
-    if existing_like:
-        db.session.delete(existing_like)
-
-    if existing_dislike:
-        db.session.delete(existing_dislike)
+    existing_dislikes = UserDislike.query.filter_by(user_id=uid, movie_id=mid).all()
+    if existing_dislikes:
+        for d in existing_dislikes:
+            db.session.delete(d)
         is_disliked = False
         msg = "Dislike removed."
     else:
-        new_dislike = UserDislike(user_id=uid, movie_id=movie_id)
+        new_dislike = UserDislike(user_id=uid, movie_id=mid)
         db.session.add(new_dislike)
         is_disliked = True
         msg = "👎 Disliked. We will tune recommendations to avoid movies like this."
 
     db.session.commit()
 
+    likes_count = UserLike.query.filter_by(movie_id=mid).count()
+    dislikes_count = UserDislike.query.filter_by(movie_id=mid).count()
+
+    # Clear personalized cache so recommendations adapt
+    if hasattr(recommender, '_personalized_cache'):
+        recommender._personalized_cache = {}
+
     return jsonify({
-        "movieId": movie_id,
+        "movieId": mid,
         "is_liked": False,
         "is_disliked": is_disliked,
+        "likes_count": likes_count,
+        "dislikes_count": dislikes_count,
         "message": msg
     })
 
@@ -461,15 +527,17 @@ def toggle_movie_save(movie_id: int):
     POST /api/movies/<id>/save
     Toggles Save to Wishlist for the authenticated user.
     """
+    mid = get_canonical_movie_id(movie_id)
     uid = int(get_jwt_identity())
-    existing = UserSaved.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    existing = UserSaved.query.filter_by(user_id=uid, movie_id=mid).all()
 
     if existing:
-        db.session.delete(existing)
+        for s in existing:
+            db.session.delete(s)
         is_saved = False
         msg = "Removed from your Wishlist."
     else:
-        new_save = UserSaved(user_id=uid, movie_id=movie_id)
+        new_save = UserSaved(user_id=uid, movie_id=mid)
         db.session.add(new_save)
         is_saved = True
         msg = "🔖 Added to your Wishlist!"
@@ -477,7 +545,7 @@ def toggle_movie_save(movie_id: int):
     db.session.commit()
 
     return jsonify({
-        "movieId": movie_id,
+        "movieId": mid,
         "is_saved": is_saved,
         "message": msg
     })
@@ -500,15 +568,21 @@ def rate_movie():
         return jsonify({"error": "movieId and rating are required"}), 400
 
     try:
-        mid = int(movie_id)
+        raw_mid = int(movie_id)
+        mid = get_canonical_movie_id(raw_mid)
         rating_val = float(rating)
 
-        existing = UserRating.query.filter_by(user_id=user_id, movie_id=mid).first()
+        # Remove existing ratings for this user and movie to prevent any duplicates
+        existing_ratings = UserRating.query.filter_by(user_id=user_id, movie_id=mid).all()
+        for r in existing_ratings:
+            db.session.delete(r)
 
         if rating_val <= 0.0:
-            if existing:
-                db.session.delete(existing)
-                db.session.commit()
+            db.session.commit()
+            if hasattr(recommender, '_user_ratings_dict') and user_id in recommender._user_ratings_dict:
+                recommender._user_ratings_dict[user_id].pop(mid, None)
+            if hasattr(recommender, '_personalized_cache'):
+                recommender._personalized_cache = {}
             return jsonify({
                 "message": "Rating cleared.",
                 "userId": user_id,
@@ -517,36 +591,28 @@ def rate_movie():
             })
 
         rating_val = max(1.0, min(5.0, rating_val))
-        if existing:
-            existing.rating = rating_val
-        else:
-            new_r = UserRating(user_id=user_id, movie_id=mid, rating=rating_val)
-            db.session.add(new_r)
-
+        new_r = UserRating(user_id=user_id, movie_id=mid, rating=rating_val)
+        db.session.add(new_r)
         db.session.commit()
 
-        # Dynamically update in-memory user_item_matrix if loaded
-        if recommender.user_item_matrix is not None:
-            if user_id not in recommender.user_item_matrix.index:
-                recommender.user_item_matrix.loc[user_id] = np.nan
-            recommender.user_item_matrix.loc[user_id, mid] = rating_val
+        # Dynamically update in-memory user ratings dictionary
+        if hasattr(recommender, '_user_ratings_dict'):
+            if user_id not in recommender._user_ratings_dict:
+                recommender._user_ratings_dict[user_id] = {}
+            recommender._user_ratings_dict[user_id][mid] = rating_val
 
-            if recommender.user_sim_df is not None:
-                from sklearn.metrics.pairwise import cosine_similarity
-                filled = recommender.user_item_matrix.fillna(0)
-                u_vec = filled.loc[[user_id]]
-                sim_row = cosine_similarity(u_vec, filled)[0]
-                sim_series = pd.Series(sim_row, index=recommender.user_item_matrix.index)
-                recommender.user_sim_df.loc[user_id] = sim_series
-                recommender.user_sim_df[user_id] = sim_series
+        # Clear personalized recommendations cache so new ratings take effect immediately!
+        if hasattr(recommender, '_personalized_cache'):
+            recommender._personalized_cache = {}
 
         return jsonify({
-            "message": f"Rating of {rating_val}★ saved! AI recommendations updated.",
+            "message": f"Rating of {rating_val:.1f}★ saved! AI recommendations updated.",
             "userId": user_id,
             "movieId": mid,
             "rating": rating_val
         })
     except Exception as e:
+        db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
 
@@ -682,10 +748,11 @@ RECOMMENDATIONS_API_CACHE = {}
 
 
 @app.route('/api/recommendations/<int:movie_id>', methods=['GET'])
-@jwt_required()
+@jwt_required(optional=True)
 def get_recommendations(movie_id: int):
     """
     Returns hybrid recommendations for a target movie with high-speed parallel enrichment and endpoint caching.
+    Supports both logged-in and guest visitors (optional authentication).
     Query Params:
     - mode: 'hybrid', 'content', or 'collaborative'
     - content_weight: alpha weight float (0.0 to 1.0)
@@ -706,9 +773,17 @@ def get_recommendations(movie_id: int):
     if cache_key in RECOMMENDATIONS_API_CACHE:
         return jsonify(RECOMMENDATIONS_API_CACHE[cache_key])
 
-    idx = recommender.movie_id_to_idx.get(movie_id)
+    canonical_id = get_canonical_movie_id(movie_id)
+    idx = recommender.movie_id_to_idx.get(canonical_id)
+    if idx is None and hasattr(recommender, 'tmdb_id_to_idx'):
+        idx = recommender.tmdb_id_to_idx.get(canonical_id)
+
     if idx is None:
-        return jsonify({"error": "Target movie not found"}), 404
+        # Fallback to top-rated movies so recommendations are NEVER empty
+        fallback_recs = recommender.get_top_rated_movies(top_n=top_n)
+        enriched = enrich_movies_parallel(fallback_recs)
+        RECOMMENDATIONS_API_CACHE[cache_key] = enriched
+        return jsonify(enriched)
         
     query_title = recommender.movies_records[idx]['clean_title'] if recommender.movies_records else recommender.movies_df.iloc[idx]['clean_title']
     
@@ -720,6 +795,9 @@ def get_recommendations(movie_id: int):
         min_rating=min_rating,
         top_n=top_n
     )
+
+    if not raw_recs:
+        raw_recs = recommender.get_top_rated_movies(top_n=top_n)
     
     enriched_recs = enrich_movies_parallel(raw_recs)
     RECOMMENDATIONS_API_CACHE[cache_key] = enriched_recs

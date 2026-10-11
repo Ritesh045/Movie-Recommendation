@@ -81,6 +81,16 @@ class MovieRecommender:
                 self.title_to_idx[o_key] = idx
 
         self.movie_id_to_idx = {int(mid): idx for idx, mid in enumerate(self.movies_df['movieId'])}
+        self.tmdb_id_to_idx = {}
+        for idx, row in enumerate(self.movies_records):
+            tid = row.get('tmdbId')
+            if pd.notnull(tid):
+                try:
+                    int_tid = int(tid)
+                    if int_tid > 0:
+                        self.tmdb_id_to_idx[int_tid] = idx
+                except Exception:
+                    pass
 
         if os.path.exists(tfidf_path):
             tfidf_data = load_pickle(tfidf_path)
@@ -279,8 +289,8 @@ class MovieRecommender:
 
         movie_idx = self.find_movie_index(query_title)
         if movie_idx == -1:
-            print(f"[WARN] Movie '{query_title}' not found in database.")
-            return []
+            print(f"[WARN] Movie '{query_title}' not found in database. Falling back to top rated titles.")
+            return self.get_top_rated_movies(top_n=top_n)
 
         # Check in-memory recommendation cache for instant sub-millisecond response
         cache_key = (movie_idx, mode.lower(), round(float(content_weight), 2), genre_filter, float(min_rating), int(top_n))
@@ -338,6 +348,9 @@ class MovieRecommender:
             recommendations.append(rec_item)
             if len(recommendations) >= top_n:
                 break
+
+        if not recommendations:
+            recommendations = self.get_top_rated_movies(top_n=top_n)
 
         self._recommend_cache[cache_key] = recommendations
         return recommendations

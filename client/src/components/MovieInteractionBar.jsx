@@ -1,32 +1,70 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ThumbsUp, ThumbsDown, Bookmark, Star, Sparkles, X, Check } from 'lucide-react';
 import { useInteractions } from '../context/InteractionContext';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { 
+  getMovieInteraction, 
+  toggleMovieLike, 
+  toggleMovieDislike, 
+  toggleMovieSave, 
+  rateMovie as apiRateMovie 
+} from '../api';
 
 const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { 
-    isLiked, 
-    isDisliked, 
-    isInWishlist, 
-    getRating, 
-    toggleLike, 
-    toggleDislike, 
-    toggleWishlist, 
-    setRating 
+    isLiked: ctxIsLiked, 
+    isDisliked: ctxIsDisliked, 
+    isInWishlist: ctxIsInWishlist, 
+    getRating: ctxGetRating, 
+    toggleLike: ctxToggleLike, 
+    toggleDislike: ctxToggleDislike, 
+    toggleWishlist: ctxToggleWishlist, 
+    setRating: ctxSetRating 
   } = useInteractions();
+
+  const mid = Number(movieId);
+
+  // Local states directly synchronized with server endpoint for persistence across refresh
+  const [liked, setLiked] = useState(false);
+  const [disliked, setDisliked] = useState(false);
+  const [inWishlist, setInWishlist] = useState(false);
+  const [currentRating, setCurrentRating] = useState(null);
+  const [likesCount, setLikesCount] = useState(0);
+  const [dislikesCount, setDislikesCount] = useState(0);
 
   const [hoverRating, setHoverRating] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const mid = Number(movieId);
-  const liked = isLiked(mid);
-  const disliked = isDisliked(mid);
-  const inWishlist = isInWishlist(mid);
-  const currentRating = getRating(mid);
+  // Load interaction status & public counts from backend on mount and whenever movieId/auth changes
+  const loadInteractions = useCallback(async () => {
+    if (!mid || isNaN(mid)) return;
+    try {
+      const data = await getMovieInteraction(mid);
+      if (data) {
+        setLikesCount(data.likes_count ?? 0);
+        setDislikesCount(data.dislikes_count ?? 0);
+        setLiked(Boolean(data.is_liked));
+        setDisliked(Boolean(data.is_disliked));
+        setInWishlist(Boolean(data.is_saved));
+        setCurrentRating(data.user_rating !== null && data.user_rating !== undefined ? Number(data.user_rating) : null);
+      }
+    } catch (err) {
+      // Fallback to context if endpoint has temporary network hiccup
+      setLiked(ctxIsLiked(mid));
+      setDisliked(ctxIsDisliked(mid));
+      setInWishlist(ctxIsInWishlist(mid));
+      const cr = ctxGetRating(mid);
+      if (cr) setCurrentRating(Number(cr));
+    }
+  }, [mid, ctxIsLiked, ctxIsDisliked, ctxIsInWishlist, ctxGetRating]);
+
+  useEffect(() => {
+    loadInteractions();
+  }, [loadInteractions, isAuthenticated]);
 
   const showToast = (msg) => {
     setFeedbackMsg(msg);
@@ -41,11 +79,21 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
       return;
     }
     setIsSubmitting(true);
-    const res = await toggleLike(mid);
-    setIsSubmitting(false);
-    if (!res.error) {
-      showToast(res.is_liked ? '👍 Liked! Similar movie recommendations boosted.' : 'Removed from Liked.');
-      if (onInteractionChange) onInteractionChange();
+    try {
+      const res = await toggleMovieLike(mid);
+      if (res) {
+        setLiked(Boolean(res.is_liked));
+        setDisliked(false);
+        if (typeof res.likes_count === 'number') setLikesCount(res.likes_count);
+        if (typeof res.dislikes_count === 'number') setDislikesCount(res.dislikes_count);
+        showToast(res.is_liked ? '👍 Liked! Similar movie recommendations boosted.' : 'Removed from Liked.');
+        ctxToggleLike(mid);
+        if (onInteractionChange) onInteractionChange();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update like.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -55,11 +103,21 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
       return;
     }
     setIsSubmitting(true);
-    const res = await toggleDislike(mid);
-    setIsSubmitting(false);
-    if (!res.error) {
-      showToast(res.is_disliked ? '👎 Disliked. Similar movies penalized & suppressed.' : 'Removed from Disliked.');
-      if (onInteractionChange) onInteractionChange();
+    try {
+      const res = await toggleMovieDislike(mid);
+      if (res) {
+        setDisliked(Boolean(res.is_disliked));
+        setLiked(false);
+        if (typeof res.likes_count === 'number') setLikesCount(res.likes_count);
+        if (typeof res.dislikes_count === 'number') setDislikesCount(res.dislikes_count);
+        showToast(res.is_disliked ? '👎 Disliked. Similar movies penalized & suppressed.' : 'Removed from Disliked.');
+        ctxToggleDislike(mid);
+        if (onInteractionChange) onInteractionChange();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update dislike.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -69,11 +127,18 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
       return;
     }
     setIsSubmitting(true);
-    const res = await toggleWishlist(mid);
-    setIsSubmitting(false);
-    if (!res.error) {
-      showToast(res.is_saved ? '🔖 Added to Wishlist! View anytime in your Wishlist.' : 'Removed from Wishlist.');
-      if (onInteractionChange) onInteractionChange();
+    try {
+      const res = await toggleMovieSave(mid);
+      if (res) {
+        setInWishlist(Boolean(res.is_saved));
+        showToast(res.is_saved ? '🔖 Added to Wishlist! View anytime in your Wishlist.' : 'Removed from Wishlist.');
+        ctxToggleWishlist(mid);
+        if (onInteractionChange) onInteractionChange();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update Wishlist.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -83,21 +148,40 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
       return;
     }
     setIsSubmitting(true);
-    const res = await setRating(mid, score);
-    setIsSubmitting(false);
-    if (!res.error) {
-      showToast(`⭐ Rated ${score}★! Saved per user & synchronized with collaborative ML.`);
-      if (onInteractionChange) onInteractionChange();
+    // Optimistic UI update
+    setCurrentRating(score);
+    try {
+      const res = await apiRateMovie(mid, score);
+      if (res) {
+        setCurrentRating(res.rating ? Number(res.rating) : score);
+        showToast(`⭐ Rated ${score}★! Saved per user & synchronized with collaborative ML.`);
+        ctxSetRating(mid, score);
+        if (onInteractionChange) onInteractionChange();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to submit rating.');
+      // Revert if error
+      loadInteractions();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleClearRating = async () => {
     if (!isAuthenticated) return;
     setIsSubmitting(true);
-    await setRating(mid, 0.0);
-    setIsSubmitting(false);
-    showToast('Rating cleared.');
-    if (onInteractionChange) onInteractionChange();
+    setCurrentRating(null);
+    try {
+      await apiRateMovie(mid, 0.0);
+      showToast('Rating cleared.');
+      ctxSetRating(mid, 0.0);
+      if (onInteractionChange) onInteractionChange();
+    } catch (err) {
+      showToast('Failed to clear rating.');
+      loadInteractions();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -107,7 +191,7 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
         {/* Left Side: YouTube-Style Like / Dislike Pill + Wishlist Button */}
         <div className="d-flex flex-wrap align-items-center gap-3">
           
-          {/* YouTube-style Segmented Pill: [ 👍 Like | 👎 Dislike ] */}
+          {/* YouTube-style Segmented Pill: [ 👍 Like {count} | 👎 Dislike {count} ] */}
           <div 
             className="d-inline-flex align-items-center rounded-pill p-1 border border-secondary border-opacity-30"
             style={{ backgroundColor: 'rgba(255, 255, 255, 0.08)' }}
@@ -132,7 +216,8 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
                 fill={liked ? "#111111" : "none"} 
                 color={liked ? "#111111" : "currentColor"} 
               />
-              <span>{liked ? 'Liked' : 'Like'}</span>
+              <span className="fw-semibold">{liked ? 'Liked' : 'Like'}</span>
+              <span className="ms-1 fw-bold opacity-75">{likesCount}</span>
             </button>
 
             {/* Vertical Segment Divider */}
@@ -163,7 +248,8 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
                 fill={disliked ? "#ffffff" : "none"} 
                 color={disliked ? "#ffffff" : "currentColor"} 
               />
-              <span>{disliked ? 'Disliked' : 'Dislike'}</span>
+              <span className="fw-semibold">{disliked ? 'Disliked' : 'Dislike'}</span>
+              <span className="ms-1 fw-bold opacity-75">{dislikesCount}</span>
             </button>
           </div>
 
@@ -208,6 +294,7 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
                   onClick={() => handleRate(starVal)}
                   title={`Rate ${starVal} Star${starVal > 1 ? 's' : ''}`}
                   aria-label={`Rate ${starVal} Stars`}
+                  disabled={isSubmitting}
                 >
                   <Star
                     size={20}
@@ -229,6 +316,7 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
                 onClick={handleClearRating}
                 title="Clear your rating"
                 aria-label="Clear rating"
+                disabled={isSubmitting}
               >
                 <X size={15} />
               </button>
