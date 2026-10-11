@@ -4,6 +4,7 @@ import { getMovieDetail, getRecommendations } from '../api';
 import MovieCard from '../components/MovieCard';
 import RecommendationModeToggle from '../components/RecommendationModeToggle';
 import LoadingSpinner from '../components/LoadingSpinner';
+import MovieInteractionBar from '../components/MovieInteractionBar';
 import { Star, Tag, Lightbulb } from 'lucide-react';
 
 const MovieDetail = () => {
@@ -14,6 +15,7 @@ const MovieDetail = () => {
   const [contentWeight, setContentWeight] = useState(0.6);
   const [loadingMovie, setLoadingMovie] = useState(true);
   const [loadingRecs, setLoadingRecs] = useState(true);
+  const [recRefreshKey, setRecRefreshKey] = useState(0);
 
   // Fetch movie details
   useEffect(() => {
@@ -49,7 +51,7 @@ const MovieDetail = () => {
     };
 
     fetchRecs();
-  }, [id, mode, contentWeight]);
+  }, [id, mode, contentWeight, recRefreshKey]);
 
   if (loadingMovie) {
     return (
@@ -108,6 +110,12 @@ const MovieDetail = () => {
               <p className="lead text-light mb-4" style={{ maxWidth: '750px' }}>
                 {movie.corpus || `Discover detailed metrics and recommendations for '${movie.clean_title}'.`}
               </p>
+
+              {/* Interactive Like, Save / My List, and 5-Star Rating Feedback Bar */}
+              <MovieInteractionBar 
+                movieId={id} 
+                onInteractionChange={() => setRecRefreshKey(k => k + 1)} 
+              />
 
               {movie.user_tags && (
                 <div className="d-flex align-items-center text-secondary small">

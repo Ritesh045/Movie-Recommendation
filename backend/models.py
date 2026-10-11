@@ -40,8 +40,8 @@ class UserRating(db.Model):
     __tablename__ = 'user_ratings'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    movie_id = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    movie_id = db.Column(db.Integer, nullable=False, index=True)
     rating = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -51,6 +51,40 @@ class UserRating(db.Model):
             "user_id": self.user_id,
             "movie_id": self.movie_id,
             "rating": self.rating,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class UserLike(db.Model):
+    __tablename__ = 'user_likes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    movie_id = db.Column(db.Integer, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "movie_id": self.movie_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class UserSaved(db.Model):
+    __tablename__ = 'user_saved'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    movie_id = db.Column(db.Integer, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "movie_id": self.movie_id,
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 

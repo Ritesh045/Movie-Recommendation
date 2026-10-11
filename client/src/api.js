@@ -64,4 +64,43 @@ export const getRecommendations = async (movieId, mode = 'hybrid', contentWeight
   return response.data;
 };
 
+// --- Interactive User Feedback (Like, Save, Rate) & Library ---
+
+export const getMovieInteraction = async (movieId) => {
+  const response = await apiClient.get(`/movies/${movieId}/interaction`);
+  return response.data;
+};
+
+export const toggleMovieLike = async (movieId) => {
+  const response = await apiClient.post(`/movies/${movieId}/like`);
+  return response.data;
+};
+
+export const toggleMovieSave = async (movieId) => {
+  const response = await apiClient.post(`/movies/${movieId}/save`);
+  return response.data;
+};
+
+export const rateMovie = async (movieId, rating) => {
+  const response = await apiClient.post('/rate', { movieId, rating });
+  return response.data;
+};
+
+export const getUserLibrary = async () => {
+  const response = await apiClient.get('/user/library');
+  return response.data;
+};
+
+export const getUserPersonalizedRecommendations = async (mode = 'hybrid', contentWeight = 0.6, limit = 12) => {
+  const response = await apiClient.get('/user-recommendations', {
+    params: {
+      mode,
+      content_weight: contentWeight,
+      limit,
+    },
+  });
+  return response.data;
+};
+
 export default apiClient;
+

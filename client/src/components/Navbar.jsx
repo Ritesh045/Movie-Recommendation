@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Film, Search, LogOut, LogIn, Lock } from 'lucide-react';
+import { Film, Search, LogOut, LogIn, Lock, Bookmark } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useInteractions } from '../context/InteractionContext';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
+  const { savedCount } = useInteractions();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,6 +53,9 @@ const Navbar = () => {
             </Link>
             <Link to="/trending" className={`nav-link-custom ${location.pathname === '/trending' ? 'active' : ''}`}>
               🔥 Trending {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
+            </Link>
+            <Link to="/my-list" className={`nav-link-custom ${location.pathname === '/my-list' ? 'active' : ''}`}>
+              🔖 My List {savedCount > 0 && <span className="badge bg-danger ms-1 px-1 py-0" style={{ fontSize: '0.65rem' }}>{savedCount}</span>} {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
             </Link>
             <Link to="/search" className={`nav-link-custom ${location.pathname === '/search' ? 'active' : ''}`}>
               Explore & Search {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}

@@ -16,18 +16,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datetime import timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, jwt_required
+from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
 
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from backend.recommender import MovieRecommender
 from backend.tmdb_api import get_movie_poster_url
-from backend.models import db
+from backend.models import db, User, UserRating, UserLike, UserSaved
 from backend.auth import auth_bp
 
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
+import numpy as np
 
 app = Flask(__name__)
 # Enable CORS for all routes so React dev server can access API
@@ -354,17 +355,98 @@ def get_movie_detail(movie_id: int):
     return jsonify(enrich_movie_item(detail))
 
 
-from backend.models import UserRating
+@app.route('/api/movies/<int:movie_id>/interaction', methods=['GET'])
+@jwt_required(optional=True)
+def get_movie_interaction(movie_id: int):
+    """
+    GET /api/movies/<id>/interaction
+    Returns current user's interaction state for a movie: is_liked, is_saved, and user_rating.
+    """
+    user_id = get_jwt_identity()
+    if not user_id:
+        return jsonify({"is_liked": False, "is_saved": False, "user_rating": None})
+
+    uid = int(user_id)
+    is_liked = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
+    is_saved = UserSaved.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
+    rating_record = UserRating.query.filter_by(user_id=uid, movie_id=movie_id).first()
+
+    return jsonify({
+        "movieId": movie_id,
+        "is_liked": is_liked,
+        "is_saved": is_saved,
+        "user_rating": rating_record.rating if rating_record else None
+    })
+
+
+@app.route('/api/movies/<int:movie_id>/like', methods=['POST'])
+@jwt_required()
+def toggle_movie_like(movie_id: int):
+    """
+    POST /api/movies/<id>/like
+    Toggles Like / Unlike for the authenticated user.
+    Feeds affinity directly into content-based and collaborative matrices.
+    """
+    uid = int(get_jwt_identity())
+    existing = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+
+    if existing:
+        db.session.delete(existing)
+        is_liked = False
+        msg = "Movie removed from Liked collection."
+    else:
+        new_like = UserLike(user_id=uid, movie_id=movie_id)
+        db.session.add(new_like)
+        is_liked = True
+        msg = "Movie added to Liked collection! Updating recommendations..."
+
+    db.session.commit()
+
+    return jsonify({
+        "movieId": movie_id,
+        "is_liked": is_liked,
+        "message": msg
+    })
+
+
+@app.route('/api/movies/<int:movie_id>/save', methods=['POST'])
+@jwt_required()
+def toggle_movie_save(movie_id: int):
+    """
+    POST /api/movies/<id>/save
+    Toggles Save / Watchlist (My List) for the authenticated user.
+    """
+    uid = int(get_jwt_identity())
+    existing = UserSaved.query.filter_by(user_id=uid, movie_id=movie_id).first()
+
+    if existing:
+        db.session.delete(existing)
+        is_saved = False
+        msg = "Movie removed from My List."
+    else:
+        new_save = UserSaved(user_id=uid, movie_id=movie_id)
+        db.session.add(new_save)
+        is_saved = True
+        msg = "Movie added to My List! Updating recommendations..."
+
+    db.session.commit()
+
+    return jsonify({
+        "movieId": movie_id,
+        "is_saved": is_saved,
+        "message": msg
+    })
+
 
 @app.route('/api/rate', methods=['POST'])
 @jwt_required()
 def rate_movie():
     """
     POST /api/rate
-    Allows authenticated user to rate a movie (1.0 to 5.0 stars).
+    Allows authenticated user to rate a movie (1.0 to 5.0 stars) or clear rating (0.0).
     Persists rating in SQLite database and dynamically updates recommender user-item matrix.
     """
-    user_id = get_jwt_identity()
+    user_id = int(get_jwt_identity())
     data = request.get_json() or {}
     movie_id = data.get('movieId')
     rating = data.get('rating')
@@ -373,43 +455,115 @@ def rate_movie():
         return jsonify({"error": "movieId and rating are required"}), 400
 
     try:
+        mid = int(movie_id)
         rating_val = float(rating)
-        rating_val = max(1.0, min(5.0, rating_val))
 
-        existing = UserRating.query.filter_by(user_id=int(user_id), movie_id=int(movie_id)).first()
+        existing = UserRating.query.filter_by(user_id=user_id, movie_id=mid).first()
+
+        if rating_val <= 0.0:
+            if existing:
+                db.session.delete(existing)
+                db.session.commit()
+            return jsonify({
+                "message": "Rating cleared.",
+                "userId": user_id,
+                "movieId": mid,
+                "rating": None
+            })
+
+        rating_val = max(1.0, min(5.0, rating_val))
         if existing:
             existing.rating = rating_val
         else:
-            new_r = UserRating(user_id=int(user_id), movie_id=int(movie_id), rating=rating_val)
+            new_r = UserRating(user_id=user_id, movie_id=mid, rating=rating_val)
             db.session.add(new_r)
 
         db.session.commit()
 
-        # Update in-memory user_item_matrix if loaded
+        # Dynamically update in-memory user_item_matrix if loaded
         if recommender.user_item_matrix is not None:
-            uid = int(user_id)
-            mid = int(movie_id)
-            if uid not in recommender.user_item_matrix.index:
-                recommender.user_item_matrix.loc[uid] = np.nan
-            recommender.user_item_matrix.loc[uid, mid] = rating_val
+            if user_id not in recommender.user_item_matrix.index:
+                recommender.user_item_matrix.loc[user_id] = np.nan
+            recommender.user_item_matrix.loc[user_id, mid] = rating_val
 
             if recommender.user_sim_df is not None:
                 from sklearn.metrics.pairwise import cosine_similarity
                 filled = recommender.user_item_matrix.fillna(0)
-                u_vec = filled.loc[[uid]]
+                u_vec = filled.loc[[user_id]]
                 sim_row = cosine_similarity(u_vec, filled)[0]
                 sim_series = pd.Series(sim_row, index=recommender.user_item_matrix.index)
-                recommender.user_sim_df.loc[uid] = sim_series
-                recommender.user_sim_df[uid] = sim_series
+                recommender.user_sim_df.loc[user_id] = sim_series
+                recommender.user_sim_df[user_id] = sim_series
 
         return jsonify({
-            "message": f"Rating of {rating_val}★ recorded successfully!",
+            "message": f"Rating of {rating_val}★ saved! AI recommendations updated.",
             "userId": user_id,
-            "movieId": movie_id,
+            "movieId": mid,
             "rating": rating_val
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/user/library', methods=['GET'])
+@jwt_required()
+def get_user_library():
+    """
+    GET /api/user/library
+    Returns the user's entire interactive movie collections:
+    Liked movies, Saved Watchlist (My List), and Rated titles.
+    """
+    user_id = int(get_jwt_identity())
+    
+    likes = UserLike.query.filter_by(user_id=user_id).order_by(UserLike.created_at.desc()).all()
+    saved = UserSaved.query.filter_by(user_id=user_id).order_by(UserSaved.created_at.desc()).all()
+    ratings = UserRating.query.filter_by(user_id=user_id).order_by(UserRating.created_at.desc()).all()
+
+    liked_ids = [l.movie_id for l in likes]
+    saved_ids = [s.movie_id for s in saved]
+    ratings_map = {r.movie_id: r.rating for r in ratings}
+
+    # Fetch movie metadata from recommender's DataFrame
+    df = recommender.movies_df
+    records_by_id = {int(r['movieId']): r for r in df.to_dict('records')} if df is not None else {}
+
+    def build_items(id_list, ratings_dict=None):
+        out = []
+        for mid in id_list:
+            if mid in records_by_id:
+                row = dict(records_by_id[mid])
+                item = {
+                    "movieId": int(row['movieId']),
+                    "tmdbId": int(row.get('tmdbId', 0)),
+                    "clean_title": row['clean_title'],
+                    "title": row['title'],
+                    "year_display": row.get('year_display', ''),
+                    "genres": row['genres_list'],
+                    "avg_rating": float(row['avg_rating']),
+                    "vote_count": int(row['vote_count'])
+                }
+                if ratings_dict and mid in ratings_dict:
+                    item['user_rating'] = ratings_dict[mid]
+                out.append(item)
+        return enrich_movies_parallel(out)
+
+    liked_movies = build_items(liked_ids)
+    saved_movies = build_items(saved_ids)
+    rated_movies = build_items(list(ratings_map.keys()), ratings_map)
+
+    return jsonify({
+        "liked_ids": liked_ids,
+        "saved_ids": saved_ids,
+        "ratings_map": ratings_map,
+        "liked_movies": liked_movies,
+        "saved_movies": saved_movies,
+        "rated_movies": rated_movies,
+        "counts": {
+            "likes": len(liked_ids),
+            "saved": len(saved_ids),
+            "ratings": len(ratings_map)
+        }
+    })
 
 
 @app.route('/api/user-recommendations', methods=['GET'])
@@ -417,22 +571,50 @@ def rate_movie():
 def get_user_personalized_recommendations():
     """
     GET /api/user-recommendations
-    Returns User-Based Collaborative Filtering recommendations for current logged-in user.
-    Includes cold-start detection flag if user has no rating history.
+    Returns dynamic Personalized Hybrid Recommendations driven by user's
+    Likes, Saves/Watchlist, and Star Ratings.
+    Query Params:
+    - mode: 'hybrid', 'content', 'collaborative'
+    - content_weight: alpha weight float (0.0 to 1.0)
+    - limit: number of recommendations
     """
     user_id = int(get_jwt_identity())
-    top_n = request.args.get('limit', default=10, type=int)
+    mode = request.args.get('mode', default='hybrid', type=str)
+    content_weight = request.args.get('content_weight', default=0.6, type=float)
+    top_n = request.args.get('limit', default=12, type=int)
 
-    result = recommender.get_user_collaborative_recommendations(user_id=user_id, top_n=top_n)
-    
-    # Enrich movies with poster URLs
+    likes = UserLike.query.filter_by(user_id=user_id).all()
+    saved = UserSaved.query.filter_by(user_id=user_id).all()
+    ratings = UserRating.query.filter_by(user_id=user_id).all()
+
+    liked_ids = [l.movie_id for l in likes]
+    saved_ids = [s.movie_id for s in saved]
+    rated_dict = {r.movie_id: r.rating for r in ratings}
+
+    result = recommender.get_user_personalized_hybrid_recommendations(
+        user_id=user_id,
+        liked_ids=liked_ids,
+        saved_ids=saved_ids,
+        rated_dict=rated_dict,
+        mode=mode,
+        content_weight=content_weight,
+        top_n=top_n
+    )
+
     enriched_recs = enrich_movies_parallel(result.get("recommendations", []))
-    
+
     return jsonify({
         "recommendations": enriched_recs,
         "is_cold_start": result.get("is_cold_start", False),
         "reason": result.get("reason", ""),
-        "userId": user_id
+        "userId": user_id,
+        "mode": mode,
+        "content_weight": content_weight,
+        "interaction_stats": {
+            "likes_count": len(liked_ids),
+            "saved_count": len(saved_ids),
+            "ratings_count": len(rated_dict)
+        }
     })
 
 

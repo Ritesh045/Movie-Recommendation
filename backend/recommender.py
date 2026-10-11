@@ -35,6 +35,7 @@ class MovieRecommender:
         self.user_item_matrix = None
         self.user_sim_df = None
         self.title_to_idx = {}
+        self.movie_id_to_idx = {}
         self.is_loaded = False
         self.load_models()
 
@@ -70,6 +71,8 @@ class MovieRecommender:
                 self.title_to_idx[c_key] = idx
             if o_key not in self.title_to_idx:
                 self.title_to_idx[o_key] = idx
+
+        self.movie_id_to_idx = {int(mid): idx for idx, mid in enumerate(self.movies_df['movieId'])}
 
         if os.path.exists(tfidf_path):
             tfidf_data = load_pickle(tfidf_path)
@@ -331,3 +334,182 @@ class MovieRecommender:
                 "similarity_score": 1.0
             })
         return results
+
+    def get_user_personalized_hybrid_recommendations(
+        self,
+        user_id: int,
+        liked_ids: List[int] = None,
+        saved_ids: List[int] = None,
+        rated_dict: Dict[int, float] = None,
+        mode: str = "hybrid",
+        content_weight: float = 0.6,
+        top_n: int = 12
+    ) -> Dict[str, Any]:
+        """
+        Dynamically computes personalized Hybrid recommendations driven by user's
+        Like, Save/Watchlist, and Rating interactions.
+        - Content-Based: Constructs an aggregate taste profile vector from liked/saved/rated titles.
+        - Collaborative Filtering: Uses user-item rating matrix with explicit & implicit signals.
+        - Hybrid Ensemble: Blends both with configurable alpha weight (content_weight).
+        """
+        if not self.is_loaded:
+            self.load_models()
+
+        liked_ids = [int(x) for x in (liked_ids or [])]
+        saved_ids = [int(x) for x in (saved_ids or [])]
+        rated_dict = {int(k): float(v) for k, v in (rated_dict or {}).items()}
+
+        all_interacted = set(liked_ids) | set(saved_ids) | set(rated_dict.keys())
+
+        if not all_interacted:
+            return {
+                "recommendations": self.get_top_rated_movies(top_n=top_n),
+                "is_cold_start": True,
+                "reason": "Cold start: No interactions yet. Like, Save, or Rate movies to unlock your personalized AI recommendations!"
+            }
+
+        n_movies = len(self.movies_df)
+        content_scores = np.zeros(n_movies)
+        collab_scores = np.zeros(n_movies)
+
+        # 1. Content-Based User Taste Profiling
+        if self.tfidf_matrix is not None:
+            profile_indices = []
+            profile_weights = []
+
+            for mid in all_interacted:
+                idx = self.movie_id_to_idx.get(mid)
+                if idx is None or idx >= self.tfidf_matrix.shape[0]:
+                    continue
+
+                w = 0.0
+                if mid in rated_dict:
+                    w = max(w, rated_dict[mid] / 5.0)
+                if mid in liked_ids:
+                    w = max(w, 1.0)
+                if mid in saved_ids:
+                    w = max(w, 0.85)
+
+                if w > 0:
+                    profile_indices.append(idx)
+                    profile_weights.append(w)
+
+            if profile_indices:
+                sub_matrix = self.tfidf_matrix[profile_indices]
+                w_arr = np.array(profile_weights).reshape(1, -1)
+                user_profile_vec = w_arr @ sub_matrix
+                content_scores = cosine_similarity(user_profile_vec, self.tfidf_matrix)[0]
+
+        # 2. Collaborative Filtering: User-Item Matrix Alignment
+        if self.user_item_matrix is not None:
+            uid = int(user_id)
+            if uid not in self.user_item_matrix.index:
+                self.user_item_matrix.loc[uid] = np.nan
+
+            for mid, r in rated_dict.items():
+                if mid in self.user_item_matrix.columns:
+                    self.user_item_matrix.loc[uid, mid] = r
+            for mid in liked_ids:
+                if mid in self.user_item_matrix.columns and pd.isna(self.user_item_matrix.loc[uid, mid]):
+                    self.user_item_matrix.loc[uid, mid] = 5.0
+            for mid in saved_ids:
+                if mid in self.user_item_matrix.columns and pd.isna(self.user_item_matrix.loc[uid, mid]):
+                    self.user_item_matrix.loc[uid, mid] = 4.5
+
+            if self.user_sim_df is not None:
+                filled = self.user_item_matrix.fillna(0)
+                u_vec = filled.loc[[uid]]
+                sim_row = cosine_similarity(u_vec, filled)[0]
+                self.user_sim_df.loc[uid] = sim_row
+                self.user_sim_df[uid] = sim_row
+
+                similar_users = self.user_sim_df[uid].drop(uid, errors='ignore').sort_values(ascending=False).head(35)
+                scores = {}
+                sim_sums = {}
+
+                for other_user, sim_score in similar_users.items():
+                    if sim_score <= 0.05:
+                        continue
+                    other_ratings = self.user_item_matrix.loc[other_user].dropna()
+                    for movie_id, rating in other_ratings.items():
+                        if movie_id in all_interacted:
+                            continue
+                        if rating >= 3.5:
+                            scores.setdefault(movie_id, 0.0)
+                            sim_sums.setdefault(movie_id, 0.0)
+                            scores[movie_id] += sim_score * rating
+                            sim_sums[movie_id] += sim_score
+
+                for mid in scores:
+                    if sim_sums[mid] > 0:
+                        pred_r = scores[mid] / sim_sums[mid]
+                        idx = self.movie_id_to_idx.get(mid)
+                        if idx is not None:
+                            collab_scores[idx] = min(1.0, max(0.0, pred_r / 5.0))
+
+        # 3. Hybrid Ensemble Score Blending
+        if mode.lower() == "content":
+            final_scores = content_scores
+        elif mode.lower() == "collaborative":
+            final_scores = collab_scores
+        else:  # hybrid
+            c_w = float(content_weight)
+            cb_w = 1.0 - c_w
+            final_scores = (c_w * content_scores) + (cb_w * collab_scores)
+
+        # 4. Rank, Filter & Generate Human-Readable Explanations
+        ranked_indices = np.argsort(final_scores)[::-1]
+        results = []
+
+        anchor_titles = []
+        for mid in list(liked_ids) + list(saved_ids) + [m for m, r in rated_dict.items() if r >= 4.0]:
+            idx = self.movie_id_to_idx.get(mid)
+            if idx is not None:
+                anchor_titles.append(self.movies_df.iloc[idx]['clean_title'])
+            if len(anchor_titles) >= 2:
+                break
+        anchor_str = f"'{anchor_titles[0]}'" if len(anchor_titles) == 1 else (f"'{anchor_titles[0]}' & '{anchor_titles[1]}'" if len(anchor_titles) >= 2 else "your saved titles")
+
+        for idx in ranked_indices:
+            row = self.movies_df.iloc[idx]
+            mid = int(row['movieId'])
+            if mid in all_interacted:
+                continue
+
+            score = float(final_scores[idx])
+            c_score = float(content_scores[idx])
+            cb_score = float(collab_scores[idx])
+
+            if c_score >= cb_score:
+                reason = f"Matches themes, genres & style of movies you liked ({anchor_str})"
+            else:
+                reason = f"Highly praised by viewers who share your movie taste"
+
+            results.append({
+                "movieId": mid,
+                "tmdbId": int(row.get('tmdbId', 0)),
+                "clean_title": row['clean_title'],
+                "title": row['title'],
+                "year_display": row.get('year_display', ''),
+                "genres": row['genres_list'],
+                "avg_rating": float(row['avg_rating']),
+                "vote_count": int(row['vote_count']),
+                "similarity_score": round(score, 4),
+                "content_score": round(c_score, 4),
+                "collab_score": round(cb_score, 4),
+                "explanation": {
+                    "shared_genres": row['genres_list'][:2],
+                    "shared_keywords": ["Personal Taste Match", "Liked Genres"],
+                    "reason": reason
+                }
+            })
+
+            if len(results) >= top_n:
+                break
+
+        return {
+            "recommendations": results,
+            "is_cold_start": False,
+            "reason": f"Tuned from {len(liked_ids)} liked, {len(saved_ids)} saved, and {len(rated_dict)} rated movies"
+        }
+
