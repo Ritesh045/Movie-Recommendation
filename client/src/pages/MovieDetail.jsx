@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { getMovieDetail, getRecommendations } from '../api';
 import MovieCard from '../components/MovieCard';
 import RecommendationModeToggle from '../components/RecommendationModeToggle';
 import LoadingSpinner from '../components/LoadingSpinner';
 import MovieInteractionBar from '../components/MovieInteractionBar';
-import { Star, Tag, Lightbulb } from 'lucide-react';
+import { Star, Tag, Lightbulb, RefreshCw } from 'lucide-react';
 
 const MovieDetail = () => {
   const { id } = useParams();
@@ -15,7 +15,16 @@ const MovieDetail = () => {
   const [contentWeight, setContentWeight] = useState(0.6);
   const [loadingMovie, setLoadingMovie] = useState(true);
   const [loadingRecs, setLoadingRecs] = useState(true);
+  const [isUpdatingRecs, setIsUpdatingRecs] = useState(false);
   const [recRefreshKey, setRecRefreshKey] = useState(0);
+
+  // In-memory client cache for instant switching between Hybrid, Content, Collaborative
+  const recsCacheRef = useRef({});
+
+  // Reset cache on movie navigation
+  useEffect(() => {
+    recsCacheRef.current = {};
+  }, [id]);
 
   // Fetch movie details
   useEffect(() => {
@@ -35,22 +44,65 @@ const MovieDetail = () => {
     window.scrollTo(0, 0);
   }, [id]);
 
-  // Fetch recommendations whenever id, mode, or contentWeight changes
+  // Instant Recommendations: check cache first, prefetch alternate modes in background
   useEffect(() => {
+    if (!id) return;
+    const cacheKey = `${mode}_${Number(contentWeight).toFixed(2)}`;
+
+    // 1. Instant Cache Hit (0ms)
+    if (recsCacheRef.current[cacheKey]) {
+      setRecommendations(recsCacheRef.current[cacheKey]);
+      setLoadingRecs(false);
+      setIsUpdatingRecs(false);
+      return;
+    }
+
+    let isMounted = true;
+
     const fetchRecs = async () => {
-      if (!id) return;
       try {
-        setLoadingRecs(true);
+        if (recommendations.length > 0) {
+          setIsUpdatingRecs(true);
+        } else {
+          setLoadingRecs(true);
+        }
+
         const recs = await getRecommendations(id, mode, contentWeight, 'All', 0.0, 10);
-        setRecommendations(recs);
+        if (isMounted) {
+          recsCacheRef.current[cacheKey] = recs || [];
+          setRecommendations(recs || []);
+
+          // Background Prefetch other modes so menu switching is 100% instant
+          const modesToPrefetch = ['hybrid', 'content', 'collaborative'].filter(m => m !== mode);
+          modesToPrefetch.forEach(async (m) => {
+            const mKey = `${m}_${Number(contentWeight).toFixed(2)}`;
+            if (!recsCacheRef.current[mKey]) {
+              try {
+                const prefetched = await getRecommendations(id, m, contentWeight, 'All', 0.0, 10);
+                if (isMounted && prefetched) {
+                  recsCacheRef.current[mKey] = prefetched;
+                }
+              } catch (_) {
+                // Ignore prefetch errors silently
+              }
+            }
+          });
+        }
       } catch (err) {
         console.error('Failed to fetch recommendations:', err);
       } finally {
-        setLoadingRecs(false);
+        if (isMounted) {
+          setLoadingRecs(false);
+          setIsUpdatingRecs(false);
+        }
       }
     };
 
     fetchRecs();
+
+    return () => {
+      isMounted = false;
+    };
   }, [id, mode, contentWeight, recRefreshKey]);
 
   if (loadingMovie) {
@@ -146,7 +198,16 @@ const MovieDetail = () => {
           <LoadingSpinner text={`Computing ${mode.toUpperCase()} recommendations...`} />
         ) : recommendations.length > 0 ? (
           <div>
-            <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-4 my-3">
+            {isUpdatingRecs && (
+              <div className="d-inline-flex align-items-center gap-2 mb-3 py-1 px-3 rounded-pill bg-warning bg-opacity-10 border border-warning border-opacity-25 text-warning small">
+                <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                <span>Updating {mode.toUpperCase()} recommendations in real time...</span>
+              </div>
+            )}
+            <div 
+              className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-4 my-3"
+              style={{ opacity: isUpdatingRecs ? 0.75 : 1, transition: 'opacity 0.2s ease' }}
+            >
               {recommendations.map((rec) => (
                 <div className="col" key={rec.movieId}>
                   <MovieCard movie={rec} mode={mode} />

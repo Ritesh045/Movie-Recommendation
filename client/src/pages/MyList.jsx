@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bookmark, ThumbsUp, ThumbsDown, Star, Sparkles, Sliders } from 'lucide-react';
+import { Bookmark, ThumbsUp, ThumbsDown, Star, Sparkles, Sliders, RefreshCw } from 'lucide-react';
 import { useInteractions } from '../context/InteractionContext';
 import { getUserPersonalizedRecommendations } from '../api';
 import MovieCard from '../components/MovieCard';
@@ -20,28 +20,63 @@ const MyList = () => {
   const [activeTab, setActiveTab] = useState('wishlist'); // 'wishlist', 'liked', 'disliked', 'rated', 'forYou'
   const [personalizedRecs, setPersonalizedRecs] = useState([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [isUpdatingRecs, setIsUpdatingRecs] = useState(false);
   const [recsMeta, setRecsMeta] = useState(null);
   const [mode, setMode] = useState('hybrid');
   const [contentWeight, setContentWeight] = useState(0.6);
 
+  const personalRecsCacheRef = React.useRef({});
+
+  // Reset personal recs cache when user interactions change
+  useEffect(() => {
+    personalRecsCacheRef.current = {};
+  }, [likesCount, dislikesCount, wishlistCount, ratedCount]);
+
   // Fetch personalized recommendations whenever user opens 'forYou' tab or tunes mode/weight
   useEffect(() => {
     if (activeTab !== 'forYou') return;
+    const cacheKey = `${mode}_${Number(contentWeight).toFixed(2)}`;
+
+    if (personalRecsCacheRef.current[cacheKey]) {
+      const cached = personalRecsCacheRef.current[cacheKey];
+      setPersonalizedRecs(cached.recommendations || []);
+      setRecsMeta(cached);
+      setLoadingRecs(false);
+      setIsUpdatingRecs(false);
+      return;
+    }
+
+    let isMounted = true;
 
     const fetchPersonalized = async () => {
       try {
-        setLoadingRecs(true);
+        if (personalizedRecs.length > 0) {
+          setIsUpdatingRecs(true);
+        } else {
+          setLoadingRecs(true);
+        }
+
         const data = await getUserPersonalizedRecommendations(mode, contentWeight, 18);
-        setPersonalizedRecs(data.recommendations || []);
-        setRecsMeta(data);
+        if (isMounted && data) {
+          personalRecsCacheRef.current[cacheKey] = data;
+          setPersonalizedRecs(data.recommendations || []);
+          setRecsMeta(data);
+        }
       } catch (err) {
         console.error('Error fetching personalized recommendations:', err);
       } finally {
-        setLoadingRecs(false);
+        if (isMounted) {
+          setLoadingRecs(false);
+          setIsUpdatingRecs(false);
+        }
       }
     };
 
     fetchPersonalized();
+
+    return () => {
+      isMounted = false;
+    };
   }, [activeTab, mode, contentWeight, likesCount, dislikesCount, wishlistCount, ratedCount]);
 
   const wishlistMovies = libraryData?.wishlist_movies || libraryData?.saved_movies || [];
@@ -251,26 +286,37 @@ const MyList = () => {
                 No recommendations found. Try adjusting the Content Weight slider above.
               </div>
             ) : (
-              <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3 g-md-4">
-                {personalizedRecs.map((movie) => (
-                  <div key={movie.movieId} className="col">
-                    <MovieCard movie={movie} mode={mode} />
-                    {movie.explanation && (
-                      <div 
-                        className="bg-dark p-2 rounded mt-2 border border-secondary border-opacity-25 text-start" 
-                        style={{ fontSize: '0.75rem' }}
-                      >
-                        <div className="text-warning fw-semibold mb-1">
-                          <Sparkles size={11} className="me-1" />
-                          Why Recommended?
-                        </div>
-                        <div className="text-secondary" style={{ lineHeight: 1.3 }}>
-                          {movie.explanation.reason}
-                        </div>
-                      </div>
-                    )}
+              <div>
+                {isUpdatingRecs && (
+                  <div className="d-inline-flex align-items-center gap-2 mb-3 py-1 px-3 rounded-pill bg-warning bg-opacity-10 border border-warning border-opacity-25 text-warning small">
+                    <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Updating personalized recommendations...</span>
                   </div>
-                ))}
+                )}
+                <div 
+                  className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3 g-md-4"
+                  style={{ opacity: isUpdatingRecs ? 0.75 : 1, transition: 'opacity 0.2s ease' }}
+                >
+                  {personalizedRecs.map((movie) => (
+                    <div key={movie.movieId} className="col">
+                      <MovieCard movie={movie} mode={mode} />
+                      {movie.explanation && (
+                        <div 
+                          className="bg-dark p-2 rounded mt-2 border border-secondary border-opacity-25 text-start" 
+                          style={{ fontSize: '0.75rem' }}
+                        >
+                          <div className="text-warning fw-semibold mb-1">
+                            <Sparkles size={11} className="me-1" />
+                            Why Recommended?
+                          </div>
+                          <div className="text-secondary" style={{ lineHeight: 1.3 }}>
+                            {movie.explanation.reason}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

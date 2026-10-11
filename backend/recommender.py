@@ -29,11 +29,18 @@ class MovieRecommender:
 
     def __init__(self):
         self.movies_df = None
+        self.movies_records = []
         self.tfidf_vectorizer = None
         self.tfidf_matrix = None
         self.svd_item_features = None
         self.user_item_matrix = None
         self.user_sim_df = None
+        self._filled_user_item_matrix = None
+        self._user_ratings_dict = {}
+        self._content_scores_cache = {}
+        self._collab_scores_cache = {}
+        self._recommend_cache = {}
+        self._personalized_cache = {}
         self.title_to_idx = {}
         self.movie_id_to_idx = {}
         self.is_loaded = False
@@ -62,6 +69,7 @@ class MovieRecommender:
         self.movies_df['genres_list'] = self.movies_df['genres'].apply(
             lambda g: [] if pd.isna(g) or g == '(no genres listed)' else g.split('|')
         )
+        self.movies_records = self.movies_df.to_dict('records')
 
         self.title_to_idx = {}
         for idx, (clean_t, orig_t) in enumerate(zip(self.movies_df['clean_title'], self.movies_df['title'])):
@@ -90,6 +98,12 @@ class MovieRecommender:
             collab_data = load_pickle(collab_path)
             self.user_item_matrix = collab_data.get('user_item_matrix')
             self.user_sim_df = collab_data.get('user_sim_df')
+            if self.user_item_matrix is not None:
+                self._filled_user_item_matrix = self.user_item_matrix.fillna(0).astype(np.float32)
+                self._user_ratings_dict = {
+                    int(uid): {int(mid): float(r) for mid, r in series.dropna().items()}
+                    for uid, series in self.user_item_matrix.iterrows()
+                }
 
         self.is_loaded = True
         print("[SUCCESS] MovieRecommender loaded models successfully.")
@@ -112,19 +126,27 @@ class MovieRecommender:
         return -1
 
     def get_content_scores(self, movie_idx: int) -> np.ndarray:
-        """Retrieves Content-Based similarity scores (TF-IDF Cosine Similarity) for a target movie dynamically."""
+        """Retrieves Content-Based similarity scores (TF-IDF Cosine Similarity) for a target movie dynamically with in-memory caching."""
+        if movie_idx in self._content_scores_cache:
+            return self._content_scores_cache[movie_idx]
+
         if self.tfidf_matrix is not None and movie_idx < self.tfidf_matrix.shape[0]:
             target_vec = self.tfidf_matrix[movie_idx]
             sim_scores = cosine_similarity(target_vec, self.tfidf_matrix)[0]
+            self._content_scores_cache[movie_idx] = sim_scores
             return sim_scores
         return np.zeros(len(self.movies_df))
 
     def get_collaborative_scores(self, movie_idx: int) -> np.ndarray:
-        """Computes Item-Based Collaborative similarity scores using SVD Item Latent Embeddings."""
+        """Computes Item-Based Collaborative similarity scores using SVD Item Latent Embeddings with in-memory caching."""
+        if movie_idx in self._collab_scores_cache:
+            return self._collab_scores_cache[movie_idx]
+
         if self.svd_item_features is not None and movie_idx < len(self.svd_item_features):
             target_vec = self.svd_item_features[movie_idx].reshape(1, -1)
             sim_vector = cosine_similarity(target_vec, self.svd_item_features)[0]
             sim_vector = (sim_vector + 1.0) / 2.0
+            self._collab_scores_cache[movie_idx] = sim_vector
             return sim_vector
         return np.zeros(len(self.movies_df))
 
@@ -221,9 +243,9 @@ class MovieRecommender:
         }
 
     def explain_recommendation(self, target_idx: int, rec_idx: int) -> Dict[str, Any]:
-        """Generates an explicit explanation breakdown of why rec_idx was recommended for target_idx."""
-        target_row = self.movies_df.iloc[target_idx]
-        rec_row = self.movies_df.iloc[rec_idx]
+        """Generates an explicit explanation breakdown of why rec_idx was recommended for target_idx using fast record dictionary lookups."""
+        target_row = self.movies_records[target_idx] if self.movies_records else self.movies_df.iloc[target_idx]
+        rec_row = self.movies_records[rec_idx] if self.movies_records else self.movies_df.iloc[rec_idx]
 
         target_genres = set(target_row['genres_list'])
         rec_genres = set(rec_row['genres_list'])
@@ -251,7 +273,7 @@ class MovieRecommender:
         min_rating: float = 0.0,
         top_n: int = 10
     ) -> List[Dict[str, Any]]:
-        """Main recommendation method by movie title."""
+        """Main recommendation method by movie title with ultra-fast caching and vector lookup."""
         if not self.is_loaded:
             self.load_models()
 
@@ -259,6 +281,11 @@ class MovieRecommender:
         if movie_idx == -1:
             print(f"[WARN] Movie '{query_title}' not found in database.")
             return []
+
+        # Check in-memory recommendation cache for instant sub-millisecond response
+        cache_key = (movie_idx, mode.lower(), round(float(content_weight), 2), genre_filter, float(min_rating), int(top_n))
+        if cache_key in self._recommend_cache:
+            return self._recommend_cache[cache_key]
 
         content_scores = self.get_content_scores(movie_idx)
         collab_scores = self.get_collaborative_scores(movie_idx)
@@ -275,11 +302,13 @@ class MovieRecommender:
         ranked_indices = np.argsort(final_scores)[::-1]
         recommendations = []
 
+        records = self.movies_records if self.movies_records else self.movies_df.to_dict('records')
+
         for idx in ranked_indices:
             if idx == movie_idx:
                 continue
 
-            row = self.movies_df.iloc[idx]
+            row = records[idx]
             
             if genre_filter and genre_filter != "All":
                 if genre_filter not in row['genres_list']:
@@ -310,6 +339,7 @@ class MovieRecommender:
             if len(recommendations) >= top_n:
                 break
 
+        self._recommend_cache[cache_key] = recommendations
         return recommendations
 
     def get_top_rated_movies(self, top_n: int = 8, min_votes: int = 50) -> List[Dict[str, Any]]:
@@ -348,12 +378,7 @@ class MovieRecommender:
     ) -> Dict[str, Any]:
         """
         Dynamically computes personalized Hybrid recommendations driven by user's
-        Like, Dislike, Save/Wishlist, and Rating interactions.
-        - Content-Based: Constructs an aggregate taste profile vector from liked/saved titles,
-          while applying negative penalty weights to disliked titles (Rocchio relevance feedback).
-        - Collaborative Filtering: Uses user-item rating matrix with explicit & implicit signals
-          (Like = 5.0★, Save/Wishlist = 4.5★, Dislike = 1.0★).
-        - Hybrid Ensemble: Blends both with configurable alpha weight (content_weight).
+        Like, Dislike, Save/Wishlist, and Rating interactions with high-performance caching.
         """
         if not self.is_loaded:
             self.load_models()
@@ -372,9 +397,22 @@ class MovieRecommender:
                 "reason": "Cold start: No interactions yet. Like, Dislike, Save to Wishlist, or Rate movies to unlock your personalized AI recommendations!"
             }
 
+        p_cache_key = (
+            int(user_id),
+            tuple(sorted(liked_ids)),
+            tuple(sorted(saved_ids)),
+            tuple(sorted(disliked_ids)),
+            tuple(sorted(rated_dict.items())),
+            mode.lower(),
+            round(float(content_weight), 2),
+            int(top_n)
+        )
+        if p_cache_key in self._personalized_cache:
+            return self._personalized_cache[p_cache_key]
+
         n_movies = len(self.movies_df)
-        content_scores = np.zeros(n_movies)
-        collab_scores = np.zeros(n_movies)
+        content_scores = np.zeros(n_movies, dtype=np.float32)
+        collab_scores = np.zeros(n_movies, dtype=np.float32)
 
         # 1. Content-Based User Taste Profiling with Rocchio Relevance Feedback
         if self.tfidf_matrix is not None:
@@ -387,7 +425,6 @@ class MovieRecommender:
                     continue
 
                 if mid in disliked_ids:
-                    # Negative feedback penalty for disliked movies
                     profile_indices.append(idx)
                     profile_weights.append(-0.75)
                     continue
@@ -406,55 +443,52 @@ class MovieRecommender:
 
             if profile_indices:
                 sub_matrix = self.tfidf_matrix[profile_indices]
-                w_arr = np.array(profile_weights).reshape(1, -1)
+                w_arr = np.array(profile_weights, dtype=np.float32).reshape(1, -1)
                 user_profile_vec = w_arr @ sub_matrix
-                # Cosine similarity between user profile and all movies
                 raw_sim = cosine_similarity(user_profile_vec, self.tfidf_matrix)[0]
-                # Clip negative cosine similarities to 0.0
-                content_scores = np.clip(raw_sim, 0.0, 1.0)
+                content_scores = np.clip(raw_sim, 0.0, 1.0).astype(np.float32)
 
-        # 2. Collaborative Filtering: User-Item Matrix Alignment
-        if self.user_item_matrix is not None:
-            uid = int(user_id)
-            if uid not in self.user_item_matrix.index:
-                self.user_item_matrix.loc[uid] = np.nan
+        # 2. Collaborative Filtering: Fast Vector-Based User Cosine Similarity
+        if self._filled_user_item_matrix is not None and self.user_item_matrix is not None:
+            cols = list(self.user_item_matrix.columns)
+            col_idx_map = {col: i for i, col in enumerate(cols)}
+            u_vec = np.zeros((1, len(cols)), dtype=np.float32)
 
             for mid, r in rated_dict.items():
-                if mid in self.user_item_matrix.columns:
-                    self.user_item_matrix.loc[uid, mid] = r
+                if mid in col_idx_map:
+                    u_vec[0, col_idx_map[mid]] = float(r)
             for mid in liked_ids:
-                if mid in self.user_item_matrix.columns and pd.isna(self.user_item_matrix.loc[uid, mid]):
-                    self.user_item_matrix.loc[uid, mid] = 5.0
+                if mid in col_idx_map and u_vec[0, col_idx_map[mid]] == 0:
+                    u_vec[0, col_idx_map[mid]] = 5.0
             for mid in saved_ids:
-                if mid in self.user_item_matrix.columns and pd.isna(self.user_item_matrix.loc[uid, mid]):
-                    self.user_item_matrix.loc[uid, mid] = 4.5
+                if mid in col_idx_map and u_vec[0, col_idx_map[mid]] == 0:
+                    u_vec[0, col_idx_map[mid]] = 4.5
             for mid in disliked_ids:
-                if mid in self.user_item_matrix.columns:
-                    self.user_item_matrix.loc[uid, mid] = 1.0 # Dislike penalizes as 1-star
+                if mid in col_idx_map:
+                    u_vec[0, col_idx_map[mid]] = 1.0
 
-            if self.user_sim_df is not None:
-                filled = self.user_item_matrix.fillna(0)
-                u_vec = filled.loc[[uid]]
-                sim_row = cosine_similarity(u_vec, filled)[0]
-                self.user_sim_df.loc[uid] = sim_row
-                self.user_sim_df[uid] = sim_row
+            if np.any(u_vec > 0):
+                sim_row = cosine_similarity(u_vec, self._filled_user_item_matrix)[0]
+                sim_indices = np.argsort(sim_row)[::-1][:40]
 
-                similar_users = self.user_sim_df[uid].drop(uid, errors='ignore').sort_values(ascending=False).head(35)
                 scores = {}
                 sim_sums = {}
 
-                for other_user, sim_score in similar_users.items():
+                for s_idx in sim_indices:
+                    sim_score = float(sim_row[s_idx])
                     if sim_score <= 0.05:
                         continue
-                    other_ratings = self.user_item_matrix.loc[other_user].dropna()
-                    for movie_id, rating in other_ratings.items():
-                        if movie_id in all_interacted:
+                    other_uid = self.user_item_matrix.index[s_idx]
+                    if other_uid == user_id:
+                        continue
+
+                    other_ratings = self._user_ratings_dict.get(int(other_uid), {})
+                    for m_id, rating in other_ratings.items():
+                        if m_id in all_interacted:
                             continue
                         if rating >= 3.5:
-                            scores.setdefault(movie_id, 0.0)
-                            sim_sums.setdefault(movie_id, 0.0)
-                            scores[movie_id] += sim_score * rating
-                            sim_sums[movie_id] += sim_score
+                            scores[m_id] = scores.get(m_id, 0.0) + (sim_score * rating)
+                            sim_sums[m_id] = sim_sums.get(m_id, 0.0) + sim_score
 
                 for mid in scores:
                     if sim_sums[mid] > 0:
@@ -476,18 +510,19 @@ class MovieRecommender:
         # 4. Rank, Filter & Generate Human-Readable Explanations
         ranked_indices = np.argsort(final_scores)[::-1]
         results = []
+        records = self.movies_records if self.movies_records else self.movies_df.to_dict('records')
 
         anchor_titles = []
         for mid in list(liked_ids) + list(saved_ids) + [m for m, r in rated_dict.items() if r >= 4.0]:
             idx = self.movie_id_to_idx.get(mid)
             if idx is not None:
-                anchor_titles.append(self.movies_df.iloc[idx]['clean_title'])
+                anchor_titles.append(records[idx]['clean_title'])
             if len(anchor_titles) >= 2:
                 break
         anchor_str = f"'{anchor_titles[0]}'" if len(anchor_titles) == 1 else (f"'{anchor_titles[0]}' & '{anchor_titles[1]}'" if len(anchor_titles) >= 2 else "your saved titles")
 
         for idx in ranked_indices:
-            row = self.movies_df.iloc[idx]
+            row = records[idx]
             mid = int(row['movieId'])
             if mid in all_interacted:
                 continue
@@ -523,9 +558,11 @@ class MovieRecommender:
             if len(results) >= top_n:
                 break
 
-        return {
+        res_payload = {
             "recommendations": results,
             "is_cold_start": False,
             "reason": f"Tuned from {len(liked_ids)} liked, {len(disliked_ids)} disliked, {len(saved_ids)} in Wishlist, and {len(rated_dict)} rated titles"
         }
+        self._personalized_cache[p_cache_key] = res_payload
+        return res_payload
 

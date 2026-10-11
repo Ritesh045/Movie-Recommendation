@@ -678,11 +678,14 @@ def get_user_personalized_recommendations():
 
 
 
+RECOMMENDATIONS_API_CACHE = {}
+
+
 @app.route('/api/recommendations/<int:movie_id>', methods=['GET'])
 @jwt_required()
 def get_recommendations(movie_id: int):
     """
-    Returns hybrid recommendations for a target movie.
+    Returns hybrid recommendations for a target movie with high-speed parallel enrichment and endpoint caching.
     Query Params:
     - mode: 'hybrid', 'content', or 'collaborative'
     - content_weight: alpha weight float (0.0 to 1.0)
@@ -693,19 +696,21 @@ def get_recommendations(movie_id: int):
     if not recommender.is_loaded:
         return jsonify({"error": "Models not loaded"}), 500
     
-    mode = request.args.get('mode', default='hybrid', type=str)
+    mode = request.args.get('mode', default='hybrid', type=str).lower()
     content_weight = request.args.get('content_weight', default=0.6, type=float)
     genre_filter = request.args.get('genre', default='All', type=str)
     min_rating = request.args.get('min_rating', default=0.0, type=float)
     top_n = request.args.get('limit', default=10, type=int)
 
-    df = recommender.movies_df
-    matched = df[df['movieId'] == movie_id]
-    
-    if matched.empty:
+    cache_key = (movie_id, mode, round(float(content_weight), 2), genre_filter, float(min_rating), int(top_n))
+    if cache_key in RECOMMENDATIONS_API_CACHE:
+        return jsonify(RECOMMENDATIONS_API_CACHE[cache_key])
+
+    idx = recommender.movie_id_to_idx.get(movie_id)
+    if idx is None:
         return jsonify({"error": "Target movie not found"}), 404
         
-    query_title = matched.iloc[0]['clean_title']
+    query_title = recommender.movies_records[idx]['clean_title'] if recommender.movies_records else recommender.movies_df.iloc[idx]['clean_title']
     
     raw_recs = recommender.recommend(
         query_title=query_title,
@@ -716,7 +721,8 @@ def get_recommendations(movie_id: int):
         top_n=top_n
     )
     
-    enriched_recs = [enrich_movie_item(r) for r in raw_recs]
+    enriched_recs = enrich_movies_parallel(raw_recs)
+    RECOMMENDATIONS_API_CACHE[cache_key] = enriched_recs
     return jsonify(enriched_recs)
 
 
