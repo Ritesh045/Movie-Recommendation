@@ -25,7 +25,6 @@ from backend.recommender import MovieRecommender
 from backend.tmdb_api import get_movie_poster_url
 from backend.models import db
 from backend.auth import auth_bp
-from backend.chatbot import chatbot_bp
 
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
@@ -34,13 +33,12 @@ app = Flask(__name__)
 # Enable CORS for all routes so React dev server can access API
 CORS(app)
 
-# Initialize Rate Limiter (~10 requests/min for chatbot)
+# Initialize Rate Limiter
 limiter = Limiter(
     get_remote_address,
     app=app,
     default_limits=["500 per day", "150 per hour"]
 )
-limiter.limit("10 per minute")(chatbot_bp)
 
 # Database Configuration (SQLite)
 db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'users.db')
@@ -57,7 +55,6 @@ jwt = JWTManager(app)
 
 # Register Blueprints
 app.register_blueprint(auth_bp)
-app.register_blueprint(chatbot_bp)
 
 # Auto-create SQLite database tables on startup
 with app.app_context():

@@ -8,7 +8,6 @@
 
 - **Netflix-Style Dark UI**: Built with `#141414` dark styling, glowing `#e50914` accents, auto-swiping hero banner carousel, horizontal poster carousels with Top 10 rank overlays (`#1`–`#10`), and original Netflix footer.
 - **JWT Authentication & 3D Glassmorphism Login**: Secure SQLite `users.db` storage, salted password hashing, regex email validation, minimum 6-character password rules, JWT token issuance, protected routes, and interactive 3D perspective tilt/flip card UI (`/login`).
-- **CineBot AI Chatbot (Gemini API)**: Floating glassmorphism chat widget (`ChatWidget.jsx`) powered server-side by Google Gemini API (`POST /api/chat`). Features strict system-instruction scope locking to movie topics & site assistance, catalog grounding using live dataset titles, `Flask-Limiter` rate limiting (~10 req/min), typing animation, and quick-reply chips. Client-side security guarantees `GEMINI_API_KEY` is never exposed in browser network requests.
 - **RESTful API Architecture**: Decoupled Flask backend serving clean JSON payloads with server-side poster resolution and caching.
 - **Hybrid Recommendation Engine**: Combines content metadata features (genres, keywords, titles) with user rating behavior patterns (MovieLens 100k dataset).
 - **Dynamic Algorithm Toggling**: Switch between **Hybrid Engine (60/40)**, **Content-Based Only**, and **Collaborative Only** in real time, with interactive $\alpha$ weight blending controls.

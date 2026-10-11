@@ -14,7 +14,6 @@ import MovieDetail from './pages/MovieDetail';
 import Search from './pages/Search';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
-import ChatWidget from './components/ChatWidget';
 
 function App() {
   return (
@@ -55,8 +54,6 @@ function App() {
               />
             </Routes>
           </main>
-          {/* Floating AI Chatbot Widget */}
-          <ChatWidget />
           <Footer />
         </div>
       </Router>

@@ -64,9 +64,4 @@ export const getRecommendations = async (movieId, mode = 'hybrid', contentWeight
   return response.data;
 };
 
-export const sendChatMessage = async (message, history = []) => {
-  const response = await apiClient.post('/chat', { message, history });
-  return response.data;
-};
-
 export default apiClient;

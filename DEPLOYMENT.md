@@ -35,8 +35,7 @@ This guide walks you through deploying **CineSphere** with the **Frontend on Ver
      gunicorn backend.app:app
      ```
 4. Scroll to **Environment Variables** and add the following keys:
-   - `TMDB_API_KEY`: Your TMDB API key (Obtain free at [themoviedb.org](https://www.themoviedb.org/settings/api))
-   - `GEMINI_API_KEY`: Your Gemini AI API key (Obtain free at [aistudio.google.com](https://aistudio.google.com/))
+   - `TMDB_API_KEY`: Your TMDB API key (Optional - app includes 19,000+ cached posters and SVG fallback)
    - `JWT_SECRET_KEY`: A random secret key string (e.g., `cinesphere-prod-jwt-secret-2026`)
    - `PYTHON_VERSION`: `3.11.8`
 5. Click **Create Web Service**.
@@ -68,7 +67,6 @@ This guide walks you through deploying **CineSphere** with the **Frontend on Ver
 - [x] **Frontend Loads**: Navigate to your Vercel URL (e.g. `https://cinesphere.vercel.app`).
 - [x] **CORS & API Connection**: Open Browser Console (F12) and ensure homepage trending movies load without CORS errors.
 - [x] **SPA Routing**: Direct URL navigation (e.g., `/trending` or `/movie/1`) reloads smoothly without 404 errors (handled by `client/vercel.json`).
-- [x] **CineBot AI**: Open CineBot modal and test sending a prompt to confirm Gemini API is responding.
 - [x] **User Auth & Recommendations**: Register/Login a user, rate a movie, and test the personalized recommendations tab.
 
 ---
