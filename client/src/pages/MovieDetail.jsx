@@ -5,7 +5,7 @@ import MovieCard from '../components/MovieCard';
 import RecommendationModeToggle from '../components/RecommendationModeToggle';
 import LoadingSpinner from '../components/LoadingSpinner';
 import MovieInteractionBar from '../components/MovieInteractionBar';
-import { Star, Tag, Lightbulb, RefreshCw } from 'lucide-react';
+import { Star, Tag, RefreshCw } from 'lucide-react';
 
 const MovieDetail = () => {
   const { id } = useParams();
@@ -211,15 +211,6 @@ const MovieDetail = () => {
               {recommendations.map((rec) => (
                 <div className="col" key={rec.movieId}>
                   <MovieCard movie={rec} mode={mode} />
-                  {rec.explanation && (
-                    <div className="bg-dark p-2 rounded mt-2 border border-secondary border-opacity-25 text-start" style={{ fontSize: '0.78rem' }}>
-                      <div className="text-warning fw-semibold mb-1">
-                        <Lightbulb size={12} className="me-1" />
-                        Why Recommended?
-                      </div>
-                      <div className="text-secondary">{rec.explanation.reason}</div>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>

@@ -300,20 +300,6 @@ const MyList = () => {
                   {personalizedRecs.map((movie) => (
                     <div key={movie.movieId} className="col">
                       <MovieCard movie={movie} mode={mode} />
-                      {movie.explanation && (
-                        <div 
-                          className="bg-dark p-2 rounded mt-2 border border-secondary border-opacity-25 text-start" 
-                          style={{ fontSize: '0.75rem' }}
-                        >
-                          <div className="text-warning fw-semibold mb-1">
-                            <Sparkles size={11} className="me-1" />
-                            Why Recommended?
-                          </div>
-                          <div className="text-secondary" style={{ lineHeight: 1.3 }}>
-                            {movie.explanation.reason}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
