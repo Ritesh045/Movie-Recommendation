@@ -19,15 +19,12 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
     isDisliked: ctxIsDisliked, 
     isInWishlist: ctxIsInWishlist, 
     getRating: ctxGetRating, 
-    toggleLike: ctxToggleLike, 
-    toggleDislike: ctxToggleDislike, 
-    toggleWishlist: ctxToggleWishlist, 
-    setRating: ctxSetRating 
+    syncInteraction 
   } = useInteractions();
 
   const mid = Number(movieId);
 
-  // Local states directly synchronized with server endpoint for persistence across refresh
+  // Local state directly synchronized with server endpoint for persistence across refresh
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
   const [inWishlist, setInWishlist] = useState(false);
@@ -37,7 +34,6 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
 
   const [hoverRating, setHoverRating] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Load interaction status & public counts from backend on mount and whenever movieId/auth changes
   const loadInteractions = useCallback(async () => {
@@ -53,7 +49,7 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
         setCurrentRating(data.user_rating !== null && data.user_rating !== undefined ? Number(data.user_rating) : null);
       }
     } catch (err) {
-      // Fallback to context if endpoint has temporary network hiccup
+      // Fallback to in-memory context if network error
       setLiked(ctxIsLiked(mid));
       setDisliked(ctxIsDisliked(mid));
       setInWishlist(ctxIsInWishlist(mid));
@@ -73,114 +69,157 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
     }, 3500);
   };
 
+  // Instant Optimistic Like (0ms feedback)
   const handleLike = async () => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    setIsSubmitting(true);
+
+    const wasLiked = liked;
+    const wasDisliked = disliked;
+    const prevLikes = likesCount;
+    const prevDislikes = dislikesCount;
+
+    // 1. Instant Optimistic UI Update
+    const nextLiked = !wasLiked;
+    setLiked(nextLiked);
+    setLikesCount(nextLiked ? prevLikes + 1 : Math.max(0, prevLikes - 1));
+    if (wasDisliked) {
+      setDisliked(false);
+      setDislikesCount(Math.max(0, prevDislikes - 1));
+    }
+    showToast(nextLiked ? '👍 Liked! Suggestions boosted.' : 'Removed from Liked.');
+    syncInteraction(mid, { is_liked: nextLiked, is_disliked: false });
+
+    // 2. Single background server sync
     try {
       const res = await toggleMovieLike(mid);
       if (res) {
-        setLiked(Boolean(res.is_liked));
-        setDisliked(false);
         if (typeof res.likes_count === 'number') setLikesCount(res.likes_count);
         if (typeof res.dislikes_count === 'number') setDislikesCount(res.dislikes_count);
-        showToast(res.is_liked ? '👍 Liked! Similar movie recommendations boosted.' : 'Removed from Liked.');
-        ctxToggleLike(mid);
-        if (onInteractionChange) onInteractionChange();
+        setLiked(Boolean(res.is_liked));
       }
     } catch (err) {
+      // Revert if server fails
+      setLiked(wasLiked);
+      setDisliked(wasDisliked);
+      setLikesCount(prevLikes);
+      setDislikesCount(prevDislikes);
+      syncInteraction(mid, { is_liked: wasLiked, is_disliked: wasDisliked });
       showToast(err.response?.data?.message || 'Failed to update like.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
+  // Instant Optimistic Dislike (0ms feedback)
   const handleDislike = async () => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    setIsSubmitting(true);
+
+    const wasLiked = liked;
+    const wasDisliked = disliked;
+    const prevLikes = likesCount;
+    const prevDislikes = dislikesCount;
+
+    // 1. Instant Optimistic UI Update
+    const nextDisliked = !wasDisliked;
+    setDisliked(nextDisliked);
+    setDislikesCount(nextDisliked ? prevDislikes + 1 : Math.max(0, prevDislikes - 1));
+    if (wasLiked) {
+      setLiked(false);
+      setLikesCount(Math.max(0, prevLikes - 1));
+    }
+    showToast(nextDisliked ? '👎 Disliked. Similar movies suppressed.' : 'Removed from Disliked.');
+    syncInteraction(mid, { is_liked: false, is_disliked: nextDisliked });
+
+    // 2. Single background server sync
     try {
       const res = await toggleMovieDislike(mid);
       if (res) {
-        setDisliked(Boolean(res.is_disliked));
-        setLiked(false);
         if (typeof res.likes_count === 'number') setLikesCount(res.likes_count);
         if (typeof res.dislikes_count === 'number') setDislikesCount(res.dislikes_count);
-        showToast(res.is_disliked ? '👎 Disliked. Similar movies penalized & suppressed.' : 'Removed from Disliked.');
-        ctxToggleDislike(mid);
-        if (onInteractionChange) onInteractionChange();
+        setDisliked(Boolean(res.is_disliked));
       }
     } catch (err) {
+      // Revert if server fails
+      setLiked(wasLiked);
+      setDisliked(wasDisliked);
+      setLikesCount(prevLikes);
+      setDislikesCount(prevDislikes);
+      syncInteraction(mid, { is_liked: wasLiked, is_disliked: wasDisliked });
       showToast(err.response?.data?.message || 'Failed to update dislike.');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
+  // Instant Optimistic Wishlist (0ms feedback)
   const handleWishlist = async () => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    setIsSubmitting(true);
+
+    const wasSaved = inWishlist;
+    const nextSaved = !wasSaved;
+    setInWishlist(nextSaved);
+    showToast(nextSaved ? '🔖 Added to Wishlist!' : 'Removed from Wishlist.');
+    syncInteraction(mid, { is_saved: nextSaved });
+
     try {
       const res = await toggleMovieSave(mid);
       if (res) {
         setInWishlist(Boolean(res.is_saved));
-        showToast(res.is_saved ? '🔖 Added to Wishlist! View anytime in your Wishlist.' : 'Removed from Wishlist.');
-        ctxToggleWishlist(mid);
-        if (onInteractionChange) onInteractionChange();
       }
     } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to update Wishlist.');
-    } finally {
-      setIsSubmitting(false);
+      setInWishlist(wasSaved);
+      syncInteraction(mid, { is_saved: wasSaved });
+      showToast('Failed to update Wishlist.');
     }
   };
 
+  // Instant Optimistic Rating (0ms feedback)
   const handleRate = async (score) => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    setIsSubmitting(true);
-    // Optimistic UI update
+
+    const prevRating = currentRating;
+    // 1. Instant Optimistic UI Update
     setCurrentRating(score);
+    showToast(`⭐ Rated ${score}★! Saved per user & synchronized with ML.`);
+    syncInteraction(mid, { rating: score });
+
+    // 2. Single background request to server
     try {
       const res = await apiRateMovie(mid, score);
-      if (res) {
-        setCurrentRating(res.rating ? Number(res.rating) : score);
-        showToast(`⭐ Rated ${score}★! Saved per user & synchronized with collaborative ML.`);
-        ctxSetRating(mid, score);
-        if (onInteractionChange) onInteractionChange();
+      if (res && res.rating) {
+        setCurrentRating(Number(res.rating));
       }
+      if (onInteractionChange) onInteractionChange();
     } catch (err) {
+      setCurrentRating(prevRating);
+      syncInteraction(mid, { rating: prevRating });
       showToast(err.response?.data?.error || 'Failed to submit rating.');
-      // Revert if error
-      loadInteractions();
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
+  // Instant Optimistic Clear Rating
   const handleClearRating = async () => {
     if (!isAuthenticated) return;
-    setIsSubmitting(true);
+    const prevRating = currentRating;
     setCurrentRating(null);
+    showToast('Rating cleared.');
+    syncInteraction(mid, { rating: 0.0 });
+
     try {
       await apiRateMovie(mid, 0.0);
-      showToast('Rating cleared.');
-      ctxSetRating(mid, 0.0);
       if (onInteractionChange) onInteractionChange();
     } catch (err) {
+      setCurrentRating(prevRating);
+      syncInteraction(mid, { rating: prevRating });
       showToast('Failed to clear rating.');
-      loadInteractions();
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -208,7 +247,6 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
               }`}
               style={{ fontSize: '0.88rem' }}
               onClick={handleLike}
-              disabled={isSubmitting}
               title={liked ? "Remove Like" : "Like (Boosts recommendations)"}
             >
               <ThumbsUp 
@@ -240,7 +278,6 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
               }`}
               style={{ fontSize: '0.88rem' }}
               onClick={handleDislike}
-              disabled={isSubmitting}
               title={disliked ? "Remove Dislike" : "Dislike (Suppresses & tunes down similar movies)"}
             >
               <ThumbsDown 
@@ -263,7 +300,6 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
             }`}
             style={{ fontSize: '0.88rem' }}
             onClick={handleWishlist}
-            disabled={isSubmitting}
             title={inWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
           >
             {inWishlist ? (
@@ -294,7 +330,6 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
                   onClick={() => handleRate(starVal)}
                   title={`Rate ${starVal} Star${starVal > 1 ? 's' : ''}`}
                   aria-label={`Rate ${starVal} Stars`}
-                  disabled={isSubmitting}
                 >
                   <Star
                     size={20}
@@ -316,7 +351,6 @@ const MovieInteractionBar = ({ movieId, onInteractionChange }) => {
                 onClick={handleClearRating}
                 title="Clear your rating"
                 aria-label="Clear rating"
-                disabled={isSubmitting}
               >
                 <X size={15} />
               </button>

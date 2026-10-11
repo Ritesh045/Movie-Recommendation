@@ -457,9 +457,13 @@ def toggle_movie_like(movie_id: int):
     likes_count = UserLike.query.filter_by(movie_id=mid).count()
     dislikes_count = UserDislike.query.filter_by(movie_id=mid).count()
 
-    # Clear personalized cache so recommendations adapt
+    # Clear all recommendation caches so recommendations adapt immediately!
+    global RECOMMENDATIONS_API_CACHE
+    RECOMMENDATIONS_API_CACHE.clear()
     if hasattr(recommender, '_personalized_cache'):
-        recommender._personalized_cache = {}
+        recommender._personalized_cache.clear()
+    if hasattr(recommender, '_recommend_cache'):
+        recommender._recommend_cache.clear()
 
     return jsonify({
         "movieId": mid,
@@ -506,9 +510,13 @@ def toggle_movie_dislike(movie_id: int):
     likes_count = UserLike.query.filter_by(movie_id=mid).count()
     dislikes_count = UserDislike.query.filter_by(movie_id=mid).count()
 
-    # Clear personalized cache so recommendations adapt
+    # Clear all recommendation caches so recommendations adapt immediately!
+    global RECOMMENDATIONS_API_CACHE
+    RECOMMENDATIONS_API_CACHE.clear()
     if hasattr(recommender, '_personalized_cache'):
-        recommender._personalized_cache = {}
+        recommender._personalized_cache.clear()
+    if hasattr(recommender, '_recommend_cache'):
+        recommender._recommend_cache.clear()
 
     return jsonify({
         "movieId": mid,
@@ -601,9 +609,13 @@ def rate_movie():
                 recommender._user_ratings_dict[user_id] = {}
             recommender._user_ratings_dict[user_id][mid] = rating_val
 
-        # Clear personalized recommendations cache so new ratings take effect immediately!
+        # Clear all recommendation caches so new ratings take effect immediately!
+        global RECOMMENDATIONS_API_CACHE
+        RECOMMENDATIONS_API_CACHE.clear()
         if hasattr(recommender, '_personalized_cache'):
-            recommender._personalized_cache = {}
+            recommender._personalized_cache.clear()
+        if hasattr(recommender, '_recommend_cache'):
+            recommender._recommend_cache.clear()
 
         return jsonify({
             "message": f"Rating of {rating_val:.1f}★ saved! AI recommendations updated.",
@@ -769,11 +781,14 @@ def get_recommendations(movie_id: int):
     min_rating = request.args.get('min_rating', default=0.0, type=float)
     top_n = request.args.get('limit', default=10, type=int)
 
-    cache_key = (movie_id, mode, round(float(content_weight), 2), genre_filter, float(min_rating), int(top_n))
+    user_id = get_jwt_identity()
+    uid = int(user_id) if user_id else None
+
+    canonical_id = get_canonical_movie_id(movie_id)
+    cache_key = (canonical_id, uid, mode, round(float(content_weight), 2), genre_filter, float(min_rating), int(top_n))
     if cache_key in RECOMMENDATIONS_API_CACHE:
         return jsonify(RECOMMENDATIONS_API_CACHE[cache_key])
 
-    canonical_id = get_canonical_movie_id(movie_id)
     idx = recommender.movie_id_to_idx.get(canonical_id)
     if idx is None and hasattr(recommender, 'tmdb_id_to_idx'):
         idx = recommender.tmdb_id_to_idx.get(canonical_id)
@@ -795,6 +810,12 @@ def get_recommendations(movie_id: int):
         min_rating=min_rating,
         top_n=top_n
     )
+
+    if uid:
+        disliked_records = UserDislike.query.filter_by(user_id=uid).all()
+        disliked_set = {d.movie_id for d in disliked_records}
+        if disliked_set:
+            raw_recs = [r for r in raw_recs if int(r.get('movieId', 0)) not in disliked_set]
 
     if not raw_recs:
         raw_recs = recommender.get_top_rated_movies(top_n=top_n)

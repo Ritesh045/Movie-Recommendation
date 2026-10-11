@@ -66,6 +66,62 @@ export const InteractionProvider = ({ children }) => {
     return ratingsMap[num] ?? ratingsMap[String(num)] ?? ratingsMap[String(movieId)] ?? null;
   }, [ratingsMap]);
 
+  // Synchronizes local interaction states in memory without triggering duplicate API calls
+  const syncInteraction = useCallback((movieId, updates = {}) => {
+    const mid = Number(movieId);
+    if (!mid || isNaN(mid)) return;
+
+    if (updates.is_liked !== undefined) {
+      setLikedIds((prev) => {
+        const next = new Set(prev);
+        if (updates.is_liked) next.add(mid);
+        else next.delete(mid);
+        return next;
+      });
+      if (updates.is_liked) {
+        setDislikedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mid);
+          return next;
+        });
+      }
+    }
+
+    if (updates.is_disliked !== undefined) {
+      setDislikedIds((prev) => {
+        const next = new Set(prev);
+        if (updates.is_disliked) next.add(mid);
+        else next.delete(mid);
+        return next;
+      });
+      if (updates.is_disliked) {
+        setLikedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mid);
+          return next;
+        });
+      }
+    }
+
+    if (updates.is_saved !== undefined) {
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        if (updates.is_saved) next.add(mid);
+        else next.delete(mid);
+        return next;
+      });
+    }
+
+    if (updates.rating !== undefined) {
+      setRatingsMap((prev) => {
+        const next = { ...prev };
+        if (updates.rating && Number(updates.rating) > 0) next[mid] = Number(updates.rating);
+        else delete next[mid];
+        return next;
+      });
+    }
+  }, []);
+
   // YouTube-style Like: clears Dislike if active
   const toggleLike = async (movieId) => {
     if (!isAuthenticated) return { error: 'Please sign in to like movies' };
@@ -180,6 +236,7 @@ export const InteractionProvider = ({ children }) => {
         toggleSave,
         toggleWishlist: toggleSave,
         setRating,
+        syncInteraction,
         refreshLibrary: fetchLibrary,
         likesCount: likedIds.size,
         dislikesCount: dislikedIds.size,

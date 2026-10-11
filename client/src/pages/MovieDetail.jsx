@@ -21,10 +21,10 @@ const MovieDetail = () => {
   // In-memory client cache for instant switching between Hybrid, Content, Collaborative
   const recsCacheRef = useRef({});
 
-  // Reset cache on movie navigation
+  // Reset cache on movie navigation or when ratings change
   useEffect(() => {
     recsCacheRef.current = {};
-  }, [id]);
+  }, [id, recRefreshKey]);
 
   // Fetch movie details
   useEffect(() => {
@@ -44,7 +44,7 @@ const MovieDetail = () => {
     window.scrollTo(0, 0);
   }, [id]);
 
-  // Instant Recommendations: check cache first, prefetch alternate modes in background
+  // Fast Recommendations: check cache first, fetch requested mode cleanly
   useEffect(() => {
     if (!id) return;
     const cacheKey = `${mode}_${Number(contentWeight).toFixed(2)}`;
@@ -67,7 +67,8 @@ const MovieDetail = () => {
           setLoadingRecs(true);
         }
 
-        const recs = await getRecommendations(id, mode, contentWeight, 'All', 0.0, 10);
+        const targetMovieId = movie?.movieId || id;
+        const recs = await getRecommendations(targetMovieId, mode, contentWeight, 'All', 0.0, 10);
         if (isMounted) {
           let finalRecs = recs;
           if (!finalRecs || finalRecs.length === 0) {
@@ -76,22 +77,6 @@ const MovieDetail = () => {
 
           recsCacheRef.current[cacheKey] = finalRecs || [];
           setRecommendations(finalRecs || []);
-
-          // Background Prefetch other modes so menu switching is 100% instant
-          const modesToPrefetch = ['hybrid', 'content', 'collaborative'].filter(m => m !== mode);
-          modesToPrefetch.forEach(async (m) => {
-            const mKey = `${m}_${Number(contentWeight).toFixed(2)}`;
-            if (!recsCacheRef.current[mKey]) {
-              try {
-                const prefetched = await getRecommendations(id, m, contentWeight, 'All', 0.0, 10);
-                if (isMounted && prefetched && prefetched.length > 0) {
-                  recsCacheRef.current[mKey] = prefetched;
-                }
-              } catch (_) {
-                // Ignore prefetch errors silently
-              }
-            }
-          });
         }
       } catch (err) {
         console.error('Failed to fetch recommendations:', err);
