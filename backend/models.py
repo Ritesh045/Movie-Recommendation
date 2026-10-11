@@ -88,3 +88,21 @@ class UserSaved(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
+
+class UserDislike(db.Model):
+    __tablename__ = 'user_dislikes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    movie_id = db.Column(db.Integer, nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "movie_id": self.movie_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+

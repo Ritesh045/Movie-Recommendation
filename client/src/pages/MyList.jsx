@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bookmark, Heart, Star, Sparkles, Sliders, Film } from 'lucide-react';
+import { Bookmark, ThumbsUp, ThumbsDown, Star, Sparkles, Sliders } from 'lucide-react';
 import { useInteractions } from '../context/InteractionContext';
 import { getUserPersonalizedRecommendations } from '../api';
 import MovieCard from '../components/MovieCard';
@@ -8,9 +8,16 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { Link } from 'react-router-dom';
 
 const MyList = () => {
-  const { libraryData, loadingLibrary, likesCount, savedCount, ratedCount } = useInteractions();
+  const { 
+    libraryData, 
+    loadingLibrary, 
+    likesCount, 
+    dislikesCount,
+    wishlistCount, 
+    ratedCount 
+  } = useInteractions();
 
-  const [activeTab, setActiveTab] = useState('saved'); // 'saved', 'liked', 'rated', 'forYou'
+  const [activeTab, setActiveTab] = useState('wishlist'); // 'wishlist', 'liked', 'disliked', 'rated', 'forYou'
   const [personalizedRecs, setPersonalizedRecs] = useState([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [recsMeta, setRecsMeta] = useState(null);
@@ -35,10 +42,11 @@ const MyList = () => {
     };
 
     fetchPersonalized();
-  }, [activeTab, mode, contentWeight, likesCount, savedCount, ratedCount]);
+  }, [activeTab, mode, contentWeight, likesCount, dislikesCount, wishlistCount, ratedCount]);
 
-  const savedMovies = libraryData?.saved_movies || [];
+  const wishlistMovies = libraryData?.wishlist_movies || libraryData?.saved_movies || [];
   const likedMovies = libraryData?.liked_movies || [];
+  const dislikedMovies = libraryData?.disliked_movies || [];
   const ratedMovies = libraryData?.rated_movies || [];
 
   return (
@@ -50,26 +58,32 @@ const MyList = () => {
           <div>
             <h1 className="fw-black text-light d-flex align-items-center gap-2 mb-1" style={{ fontSize: '2.4rem' }}>
               <Bookmark color="#ffd700" size={32} />
-              My Library & Watchlist
+              My Wishlist & Library
             </h1>
             <p className="text-secondary mb-0" style={{ fontSize: '0.95rem' }}>
-              Your saved watchlist, liked movies, and AI recommendations tuned by your taste.
+              Manage your personal Wishlist, YouTube-style Likes & Dislikes, and ratings that train your AI recommendations.
             </p>
           </div>
 
-          {/* Interactive Tabs */}
-          <div className="trending-category-tabs">
+          {/* Interactive Navigation Tabs */}
+          <div className="trending-category-tabs d-flex flex-wrap gap-2">
             <button
-              className={`trending-tab-btn ${activeTab === 'saved' ? 'active' : ''}`}
-              onClick={() => setActiveTab('saved')}
+              className={`trending-tab-btn ${activeTab === 'wishlist' ? 'active' : ''}`}
+              onClick={() => setActiveTab('wishlist')}
             >
-              <Bookmark size={15} /> Watchlist ({savedCount})
+              <Bookmark size={15} /> Wishlist ({wishlistCount})
             </button>
             <button
               className={`trending-tab-btn ${activeTab === 'liked' ? 'active' : ''}`}
               onClick={() => setActiveTab('liked')}
             >
-              <Heart size={15} /> Liked ({likesCount})
+              <ThumbsUp size={15} /> Liked ({likesCount})
+            </button>
+            <button
+              className={`trending-tab-btn ${activeTab === 'disliked' ? 'active' : ''}`}
+              onClick={() => setActiveTab('disliked')}
+            >
+              <ThumbsDown size={15} /> Disliked ({dislikesCount})
             </button>
             <button
               className={`trending-tab-btn ${activeTab === 'rated' ? 'active' : ''}`}
@@ -86,23 +100,23 @@ const MyList = () => {
           </div>
         </div>
 
-        {/* Tab 1: Saved Watchlist */}
-        {activeTab === 'saved' && (
+        {/* Tab 1: Saved Wishlist */}
+        {activeTab === 'wishlist' && (
           <div>
             {loadingLibrary ? (
-              <LoadingSpinner text="Loading your Watchlist..." />
-            ) : savedMovies.length === 0 ? (
+              <LoadingSpinner text="Loading your Wishlist..." />
+            ) : wishlistMovies.length === 0 ? (
               <div className="text-center py-5 text-secondary">
                 <Bookmark size={48} className="text-secondary opacity-50 mb-3" />
-                <h4 className="text-light">Your Watchlist is empty</h4>
-                <p className="mb-4">Click the bookmark icon or "+ Add to List" on any movie to save it here.</p>
+                <h4 className="text-light">Your Wishlist is empty</h4>
+                <p className="mb-4">Click "+ Add to Wishlist" or the bookmark icon on any movie to save titles here.</p>
                 <Link to="/search" className="btn btn-danger px-4 py-2 rounded-pill fw-bold">
                   Explore Movies
                 </Link>
               </div>
             ) : (
               <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3 g-md-4">
-                {savedMovies.map((movie) => (
+                {wishlistMovies.map((movie) => (
                   <div key={movie.movieId} className="col">
                     <MovieCard movie={movie} />
                   </div>
@@ -119,9 +133,9 @@ const MyList = () => {
               <LoadingSpinner text="Loading Liked titles..." />
             ) : likedMovies.length === 0 ? (
               <div className="text-center py-5 text-secondary">
-                <Heart size={48} className="text-secondary opacity-50 mb-3" />
+                <ThumbsUp size={48} className="text-secondary opacity-50 mb-3" />
                 <h4 className="text-light">No liked movies yet</h4>
-                <p className="mb-4">Click the heart icon on any movie you love to boost its plot and genre themes in your recommendations.</p>
+                <p className="mb-4">Click 👍 Like on movies you enjoy to boost their plot themes, genres, and directors in your recommendations.</p>
                 <Link to="/trending" className="btn btn-danger px-4 py-2 rounded-pill fw-bold">
                   Browse Trending Titles
                 </Link>
@@ -138,7 +152,40 @@ const MyList = () => {
           </div>
         )}
 
-        {/* Tab 3: Rated Movies */}
+        {/* Tab 3: Disliked Movies */}
+        {activeTab === 'disliked' && (
+          <div>
+            <div className="alert alert-dark border border-secondary border-opacity-25 d-flex align-items-center gap-2 mb-4 text-light">
+              <ThumbsDown size={18} className="text-danger flex-shrink-0" />
+              <small>
+                Disliked titles are automatically excluded from your recommendations and penalize similar movies. You can click 👎 Dislike again on any title to remove it from this list.
+              </small>
+            </div>
+
+            {loadingLibrary ? (
+              <LoadingSpinner text="Loading Disliked titles..." />
+            ) : dislikedMovies.length === 0 ? (
+              <div className="text-center py-5 text-secondary">
+                <ThumbsDown size={48} className="text-secondary opacity-50 mb-3" />
+                <h4 className="text-light">No disliked movies</h4>
+                <p className="mb-4">Disliking titles helps suppress content you do not want to see.</p>
+                <Link to="/" className="btn btn-outline-light px-4 py-2 rounded-pill fw-bold">
+                  Back to Catalog
+                </Link>
+              </div>
+            ) : (
+              <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6 g-3 g-md-4">
+                {dislikedMovies.map((movie) => (
+                  <div key={movie.movieId} className="col">
+                    <MovieCard movie={movie} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 4: Rated Movies */}
         {activeTab === 'rated' && (
           <div>
             {loadingLibrary ? (
@@ -164,7 +211,7 @@ const MyList = () => {
           </div>
         )}
 
-        {/* Tab 4: AI Recommendations Tuned by User Interactions */}
+        {/* Tab 5: AI Recommendations Tuned by User Interactions */}
         {activeTab === 'forYou' && (
           <div>
             <div className="p-3 mb-4 rounded-3 bg-dark bg-opacity-50 border border-secondary border-opacity-25 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
@@ -174,7 +221,7 @@ const MyList = () => {
                   Personalized Recommendations Engine
                 </h5>
                 <p className="text-secondary mb-0 small">
-                  {recsMeta?.reason || 'Calculated in real-time from your Likes, Watchlist, and Star Ratings.'}
+                  {recsMeta?.reason || 'Calculated in real-time from your Likes, Dislikes, Wishlist, and Star Ratings.'}
                 </p>
               </div>
 
@@ -193,7 +240,7 @@ const MyList = () => {
                 <Sliders size={48} className="text-warning opacity-75 mb-3" />
                 <h4 className="text-light">Start Interacting to Unlock Personalization</h4>
                 <p className="mb-4" style={{ maxWidth: '550px', margin: '0 auto' }}>
-                  Like movies, save to your Watchlist, or rate titles 1–5 stars. Our Hybrid ML Engine will instantly model your preferences!
+                  Like movies, save to your Wishlist, or rate titles 1–5 stars. Our Hybrid ML Engine will instantly model your preferences!
                 </p>
                 <Link to="/" className="btn btn-danger px-4 py-2 rounded-pill fw-bold">
                   Browse Catalog

@@ -20,7 +20,7 @@ const getInitialCache = () => {
 
 const Home = () => {
   const { isAuthenticated } = useAuth();
-  const { libraryData, likesCount, savedCount, ratedCount } = useInteractions();
+  const { libraryData, likesCount, wishlistCount, ratedCount } = useInteractions();
   const [content, setContent] = useState(() => getInitialCache());
   const [personalizedRecs, setPersonalizedRecs] = useState([]);
 
@@ -71,7 +71,7 @@ const Home = () => {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, likesCount, savedCount, ratedCount]);
+  }, [isAuthenticated, likesCount, wishlistCount, ratedCount]);
 
   if (!content) {
     return (
@@ -82,6 +82,7 @@ const Home = () => {
   }
 
   const heroMovie = content?.top10?.[0] || null;
+  const wishlistMovies = libraryData?.wishlist_movies || libraryData?.saved_movies || [];
 
   return (
     <div>
@@ -96,18 +97,18 @@ const Home = () => {
           />
         )}
 
-        {/* My List / Saved Watchlist Row */}
-        {libraryData?.saved_movies?.length > 0 && (
+        {/* Wishlist Row */}
+        {wishlistMovies.length > 0 && (
           <MovieRow 
-            title="🔖 My List (Your Watchlist)" 
-            movies={libraryData.saved_movies} 
+            title="🔖 Your Wishlist" 
+            movies={wishlistMovies} 
           />
         )}
 
         {/* Liked Movies Row */}
         {libraryData?.liked_movies?.length > 0 && (
           <MovieRow 
-            title="❤️ Movies You Liked" 
+            title="👍 Movies You Liked" 
             movies={libraryData.liked_movies} 
           />
         )}

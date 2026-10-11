@@ -340,6 +340,7 @@ class MovieRecommender:
         user_id: int,
         liked_ids: List[int] = None,
         saved_ids: List[int] = None,
+        disliked_ids: List[int] = None,
         rated_dict: Dict[int, float] = None,
         mode: str = "hybrid",
         content_weight: float = 0.6,
@@ -347,9 +348,11 @@ class MovieRecommender:
     ) -> Dict[str, Any]:
         """
         Dynamically computes personalized Hybrid recommendations driven by user's
-        Like, Save/Watchlist, and Rating interactions.
-        - Content-Based: Constructs an aggregate taste profile vector from liked/saved/rated titles.
-        - Collaborative Filtering: Uses user-item rating matrix with explicit & implicit signals.
+        Like, Dislike, Save/Wishlist, and Rating interactions.
+        - Content-Based: Constructs an aggregate taste profile vector from liked/saved titles,
+          while applying negative penalty weights to disliked titles (Rocchio relevance feedback).
+        - Collaborative Filtering: Uses user-item rating matrix with explicit & implicit signals
+          (Like = 5.0★, Save/Wishlist = 4.5★, Dislike = 1.0★).
         - Hybrid Ensemble: Blends both with configurable alpha weight (content_weight).
         """
         if not self.is_loaded:
@@ -357,22 +360,23 @@ class MovieRecommender:
 
         liked_ids = [int(x) for x in (liked_ids or [])]
         saved_ids = [int(x) for x in (saved_ids or [])]
+        disliked_ids = [int(x) for x in (disliked_ids or [])]
         rated_dict = {int(k): float(v) for k, v in (rated_dict or {}).items()}
 
-        all_interacted = set(liked_ids) | set(saved_ids) | set(rated_dict.keys())
+        all_interacted = set(liked_ids) | set(saved_ids) | set(rated_dict.keys()) | set(disliked_ids)
 
         if not all_interacted:
             return {
                 "recommendations": self.get_top_rated_movies(top_n=top_n),
                 "is_cold_start": True,
-                "reason": "Cold start: No interactions yet. Like, Save, or Rate movies to unlock your personalized AI recommendations!"
+                "reason": "Cold start: No interactions yet. Like, Dislike, Save to Wishlist, or Rate movies to unlock your personalized AI recommendations!"
             }
 
         n_movies = len(self.movies_df)
         content_scores = np.zeros(n_movies)
         collab_scores = np.zeros(n_movies)
 
-        # 1. Content-Based User Taste Profiling
+        # 1. Content-Based User Taste Profiling with Rocchio Relevance Feedback
         if self.tfidf_matrix is not None:
             profile_indices = []
             profile_weights = []
@@ -380,6 +384,12 @@ class MovieRecommender:
             for mid in all_interacted:
                 idx = self.movie_id_to_idx.get(mid)
                 if idx is None or idx >= self.tfidf_matrix.shape[0]:
+                    continue
+
+                if mid in disliked_ids:
+                    # Negative feedback penalty for disliked movies
+                    profile_indices.append(idx)
+                    profile_weights.append(-0.75)
                     continue
 
                 w = 0.0
@@ -398,7 +408,10 @@ class MovieRecommender:
                 sub_matrix = self.tfidf_matrix[profile_indices]
                 w_arr = np.array(profile_weights).reshape(1, -1)
                 user_profile_vec = w_arr @ sub_matrix
-                content_scores = cosine_similarity(user_profile_vec, self.tfidf_matrix)[0]
+                # Cosine similarity between user profile and all movies
+                raw_sim = cosine_similarity(user_profile_vec, self.tfidf_matrix)[0]
+                # Clip negative cosine similarities to 0.0
+                content_scores = np.clip(raw_sim, 0.0, 1.0)
 
         # 2. Collaborative Filtering: User-Item Matrix Alignment
         if self.user_item_matrix is not None:
@@ -415,6 +428,9 @@ class MovieRecommender:
             for mid in saved_ids:
                 if mid in self.user_item_matrix.columns and pd.isna(self.user_item_matrix.loc[uid, mid]):
                     self.user_item_matrix.loc[uid, mid] = 4.5
+            for mid in disliked_ids:
+                if mid in self.user_item_matrix.columns:
+                    self.user_item_matrix.loc[uid, mid] = 1.0 # Dislike penalizes as 1-star
 
             if self.user_sim_df is not None:
                 filled = self.user_item_matrix.fillna(0)
@@ -510,6 +526,6 @@ class MovieRecommender:
         return {
             "recommendations": results,
             "is_cold_start": False,
-            "reason": f"Tuned from {len(liked_ids)} liked, {len(saved_ids)} saved, and {len(rated_dict)} rated movies"
+            "reason": f"Tuned from {len(liked_ids)} liked, {len(disliked_ids)} disliked, {len(saved_ids)} in Wishlist, and {len(rated_dict)} rated titles"
         }
 

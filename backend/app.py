@@ -23,7 +23,7 @@ from flask_limiter.util import get_remote_address
 
 from backend.recommender import MovieRecommender
 from backend.tmdb_api import get_movie_poster_url
-from backend.models import db, User, UserRating, UserLike, UserSaved
+from backend.models import db, User, UserRating, UserLike, UserSaved, UserDislike
 from backend.auth import auth_bp
 
 from concurrent.futures import ThreadPoolExecutor
@@ -360,20 +360,22 @@ def get_movie_detail(movie_id: int):
 def get_movie_interaction(movie_id: int):
     """
     GET /api/movies/<id>/interaction
-    Returns current user's interaction state for a movie: is_liked, is_saved, and user_rating.
+    Returns current user's interaction state: is_liked, is_disliked, is_saved (Wishlist), and user_rating.
     """
     user_id = get_jwt_identity()
     if not user_id:
-        return jsonify({"is_liked": False, "is_saved": False, "user_rating": None})
+        return jsonify({"is_liked": False, "is_disliked": False, "is_saved": False, "user_rating": None})
 
     uid = int(user_id)
     is_liked = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
+    is_disliked = UserDislike.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
     is_saved = UserSaved.query.filter_by(user_id=uid, movie_id=movie_id).first() is not None
     rating_record = UserRating.query.filter_by(user_id=uid, movie_id=movie_id).first()
 
     return jsonify({
         "movieId": movie_id,
         "is_liked": is_liked,
+        "is_disliked": is_disliked,
         "is_saved": is_saved,
         "user_rating": rating_record.rating if rating_record else None
     })
@@ -384,27 +386,70 @@ def get_movie_interaction(movie_id: int):
 def toggle_movie_like(movie_id: int):
     """
     POST /api/movies/<id>/like
-    Toggles Like / Unlike for the authenticated user.
-    Feeds affinity directly into content-based and collaborative matrices.
+    Toggles Like (YouTube-style):
+    - If previously Disliked, automatically clears Dislike.
+    - Toggles Like on/off.
     """
     uid = int(get_jwt_identity())
-    existing = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    existing_like = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    existing_dislike = UserDislike.query.filter_by(user_id=uid, movie_id=movie_id).first()
 
-    if existing:
-        db.session.delete(existing)
+    if existing_dislike:
+        db.session.delete(existing_dislike)
+
+    if existing_like:
+        db.session.delete(existing_like)
         is_liked = False
-        msg = "Movie removed from Liked collection."
+        msg = "Like removed."
     else:
         new_like = UserLike(user_id=uid, movie_id=movie_id)
         db.session.add(new_like)
         is_liked = True
-        msg = "Movie added to Liked collection! Updating recommendations..."
+        msg = "👍 Liked! Boosting this title and similar movies in your recommendations."
 
     db.session.commit()
 
     return jsonify({
         "movieId": movie_id,
         "is_liked": is_liked,
+        "is_disliked": False,
+        "message": msg
+    })
+
+
+@app.route('/api/movies/<int:movie_id>/dislike', methods=['POST'])
+@jwt_required()
+def toggle_movie_dislike(movie_id: int):
+    """
+    POST /api/movies/<id>/dislike
+    Toggles Dislike (YouTube-style):
+    - If previously Liked, automatically clears Like.
+    - Toggles Dislike on/off.
+    - Disliking heavily downranks similar themes in Content & Collaborative models.
+    """
+    uid = int(get_jwt_identity())
+    existing_like = UserLike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+    existing_dislike = UserDislike.query.filter_by(user_id=uid, movie_id=movie_id).first()
+
+    if existing_like:
+        db.session.delete(existing_like)
+
+    if existing_dislike:
+        db.session.delete(existing_dislike)
+        is_disliked = False
+        msg = "Dislike removed."
+    else:
+        new_dislike = UserDislike(user_id=uid, movie_id=movie_id)
+        db.session.add(new_dislike)
+        is_disliked = True
+        msg = "👎 Disliked. We will tune recommendations to avoid movies like this."
+
+    db.session.commit()
+
+    return jsonify({
+        "movieId": movie_id,
+        "is_liked": False,
+        "is_disliked": is_disliked,
         "message": msg
     })
 
@@ -414,7 +459,7 @@ def toggle_movie_like(movie_id: int):
 def toggle_movie_save(movie_id: int):
     """
     POST /api/movies/<id>/save
-    Toggles Save / Watchlist (My List) for the authenticated user.
+    Toggles Save to Wishlist for the authenticated user.
     """
     uid = int(get_jwt_identity())
     existing = UserSaved.query.filter_by(user_id=uid, movie_id=movie_id).first()
@@ -422,12 +467,12 @@ def toggle_movie_save(movie_id: int):
     if existing:
         db.session.delete(existing)
         is_saved = False
-        msg = "Movie removed from My List."
+        msg = "Removed from your Wishlist."
     else:
         new_save = UserSaved(user_id=uid, movie_id=movie_id)
         db.session.add(new_save)
         is_saved = True
-        msg = "Movie added to My List! Updating recommendations..."
+        msg = "🔖 Added to your Wishlist!"
 
     db.session.commit()
 
@@ -511,15 +556,17 @@ def get_user_library():
     """
     GET /api/user/library
     Returns the user's entire interactive movie collections:
-    Liked movies, Saved Watchlist (My List), and Rated titles.
+    Wishlist (saved), Liked, Disliked, and Rated titles.
     """
     user_id = int(get_jwt_identity())
     
     likes = UserLike.query.filter_by(user_id=user_id).order_by(UserLike.created_at.desc()).all()
+    dislikes = UserDislike.query.filter_by(user_id=user_id).order_by(UserDislike.created_at.desc()).all()
     saved = UserSaved.query.filter_by(user_id=user_id).order_by(UserSaved.created_at.desc()).all()
     ratings = UserRating.query.filter_by(user_id=user_id).order_by(UserRating.created_at.desc()).all()
 
     liked_ids = [l.movie_id for l in likes]
+    disliked_ids = [d.movie_id for d in dislikes]
     saved_ids = [s.movie_id for s in saved]
     ratings_map = {r.movie_id: r.rating for r in ratings}
 
@@ -548,19 +595,26 @@ def get_user_library():
         return enrich_movies_parallel(out)
 
     liked_movies = build_items(liked_ids)
+    disliked_movies = build_items(disliked_ids)
     saved_movies = build_items(saved_ids)
     rated_movies = build_items(list(ratings_map.keys()), ratings_map)
 
     return jsonify({
         "liked_ids": liked_ids,
+        "disliked_ids": disliked_ids,
         "saved_ids": saved_ids,
+        "wishlist_ids": saved_ids,
         "ratings_map": ratings_map,
         "liked_movies": liked_movies,
+        "disliked_movies": disliked_movies,
         "saved_movies": saved_movies,
+        "wishlist_movies": saved_movies,
         "rated_movies": rated_movies,
         "counts": {
             "likes": len(liked_ids),
+            "dislikes": len(disliked_ids),
             "saved": len(saved_ids),
+            "wishlist": len(saved_ids),
             "ratings": len(ratings_map)
         }
     })
@@ -572,7 +626,7 @@ def get_user_personalized_recommendations():
     """
     GET /api/user-recommendations
     Returns dynamic Personalized Hybrid Recommendations driven by user's
-    Likes, Saves/Watchlist, and Star Ratings.
+    Likes, Dislikes, Wishlist, and Star Ratings.
     Query Params:
     - mode: 'hybrid', 'content', 'collaborative'
     - content_weight: alpha weight float (0.0 to 1.0)
@@ -584,10 +638,12 @@ def get_user_personalized_recommendations():
     top_n = request.args.get('limit', default=12, type=int)
 
     likes = UserLike.query.filter_by(user_id=user_id).all()
+    dislikes = UserDislike.query.filter_by(user_id=user_id).all()
     saved = UserSaved.query.filter_by(user_id=user_id).all()
     ratings = UserRating.query.filter_by(user_id=user_id).all()
 
     liked_ids = [l.movie_id for l in likes]
+    disliked_ids = [d.movie_id for d in dislikes]
     saved_ids = [s.movie_id for s in saved]
     rated_dict = {r.movie_id: r.rating for r in ratings}
 
@@ -595,6 +651,7 @@ def get_user_personalized_recommendations():
         user_id=user_id,
         liked_ids=liked_ids,
         saved_ids=saved_ids,
+        disliked_ids=disliked_ids,
         rated_dict=rated_dict,
         mode=mode,
         content_weight=content_weight,
@@ -612,7 +669,9 @@ def get_user_personalized_recommendations():
         "content_weight": content_weight,
         "interaction_stats": {
             "likes_count": len(liked_ids),
+            "dislikes_count": len(disliked_ids),
             "saved_count": len(saved_ids),
+            "wishlist_count": len(saved_ids),
             "ratings_count": len(rated_dict)
         }
     })

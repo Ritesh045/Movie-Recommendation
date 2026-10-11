@@ -76,6 +76,11 @@ export const toggleMovieLike = async (movieId) => {
   return response.data;
 };
 
+export const toggleMovieDislike = async (movieId) => {
+  const response = await apiClient.post(`/movies/${movieId}/dislike`);
+  return response.data;
+};
+
 export const toggleMovieSave = async (movieId) => {
   const response = await apiClient.post(`/movies/${movieId}/save`);
   return response.data;

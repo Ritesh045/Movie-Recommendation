@@ -1,17 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import { getUserLibrary, toggleMovieLike, toggleMovieSave, rateMovie as apiRateMovie } from '../api';
+import { getUserLibrary, toggleMovieLike, toggleMovieDislike, toggleMovieSave, rateMovie as apiRateMovie } from '../api';
 
 const InteractionContext = createContext(null);
 
 export const InteractionProvider = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const [likedIds, setLikedIds] = useState(new Set());
+  const [dislikedIds, setDislikedIds] = useState(new Set());
   const [savedIds, setSavedIds] = useState(new Set());
   const [ratingsMap, setRatingsMap] = useState({});
   const [libraryData, setLibraryData] = useState({
     liked_movies: [],
+    disliked_movies: [],
     saved_movies: [],
+    wishlist_movies: [],
     rated_movies: [],
   });
   const [loadingLibrary, setLoadingLibrary] = useState(false);
@@ -20,9 +23,10 @@ export const InteractionProvider = ({ children }) => {
   const fetchLibrary = useCallback(async () => {
     if (!isAuthenticated) {
       setLikedIds(new Set());
+      setDislikedIds(new Set());
       setSavedIds(new Set());
       setRatingsMap({});
-      setLibraryData({ liked_movies: [], saved_movies: [], rated_movies: [] });
+      setLibraryData({ liked_movies: [], disliked_movies: [], saved_movies: [], wishlist_movies: [], rated_movies: [] });
       return;
     }
 
@@ -31,11 +35,14 @@ export const InteractionProvider = ({ children }) => {
       const data = await getUserLibrary();
       if (data) {
         setLikedIds(new Set(data.liked_ids || []));
-        setSavedIds(new Set(data.saved_ids || []));
+        setDislikedIds(new Set(data.disliked_ids || []));
+        setSavedIds(new Set(data.saved_ids || data.wishlist_ids || []));
         setRatingsMap(data.ratings_map || {});
         setLibraryData({
           liked_movies: data.liked_movies || [],
-          saved_movies: data.saved_movies || [],
+          disliked_movies: data.disliked_movies || [],
+          saved_movies: data.saved_movies || data.wishlist_movies || [],
+          wishlist_movies: data.wishlist_movies || data.saved_movies || [],
           rated_movies: data.rated_movies || [],
         });
       }
@@ -51,9 +58,12 @@ export const InteractionProvider = ({ children }) => {
   }, [fetchLibrary]);
 
   const isLiked = useCallback((movieId) => likedIds.has(Number(movieId)), [likedIds]);
+  const isDisliked = useCallback((movieId) => dislikedIds.has(Number(movieId)), [dislikedIds]);
   const isSaved = useCallback((movieId) => savedIds.has(Number(movieId)), [savedIds]);
+  const isInWishlist = isSaved;
   const getRating = useCallback((movieId) => ratingsMap[Number(movieId)] || null, [ratingsMap]);
 
+  // YouTube-style Like: clears Dislike if active
   const toggleLike = async (movieId) => {
     if (!isAuthenticated) return { error: 'Please sign in to like movies' };
     const mid = Number(movieId);
@@ -65,7 +75,14 @@ export const InteractionProvider = ({ children }) => {
         else next.delete(mid);
         return next;
       });
-      // Refresh full library in background to update recommendations
+      // Clear dislike locally if liked
+      if (res.is_liked) {
+        setDislikedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mid);
+          return next;
+        });
+      }
       fetchLibrary();
       return res;
     } catch (err) {
@@ -74,8 +91,36 @@ export const InteractionProvider = ({ children }) => {
     }
   };
 
+  // YouTube-style Dislike: clears Like if active
+  const toggleDislike = async (movieId) => {
+    if (!isAuthenticated) return { error: 'Please sign in to dislike movies' };
+    const mid = Number(movieId);
+    try {
+      const res = await toggleMovieDislike(mid);
+      setDislikedIds((prev) => {
+        const next = new Set(prev);
+        if (res.is_disliked) next.add(mid);
+        else next.delete(mid);
+        return next;
+      });
+      // Clear like locally if disliked
+      if (res.is_disliked) {
+        setLikedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(mid);
+          return next;
+        });
+      }
+      fetchLibrary();
+      return res;
+    } catch (err) {
+      console.error('Error toggling dislike:', err);
+      return { error: err.message };
+    }
+  };
+
   const toggleSave = async (movieId) => {
-    if (!isAuthenticated) return { error: 'Please sign in to save movies to My List' };
+    if (!isAuthenticated) return { error: 'Please sign in to add movies to Wishlist' };
     const mid = Number(movieId);
     try {
       const res = await toggleMovieSave(mid);
@@ -85,11 +130,10 @@ export const InteractionProvider = ({ children }) => {
         else next.delete(mid);
         return next;
       });
-      // Refresh full library in background
       fetchLibrary();
       return res;
     } catch (err) {
-      console.error('Error toggling save:', err);
+      console.error('Error toggling wishlist/save:', err);
       return { error: err.message };
     }
   };
@@ -105,7 +149,6 @@ export const InteractionProvider = ({ children }) => {
         else delete next[mid];
         return next;
       });
-      // Refresh full library in background to update collaborative matrix
       fetchLibrary();
       return res;
     } catch (err) {
@@ -118,19 +161,27 @@ export const InteractionProvider = ({ children }) => {
     <InteractionContext.Provider
       value={{
         likedIds,
+        dislikedIds,
         savedIds,
+        wishlistIds: savedIds,
         ratingsMap,
         libraryData,
         loadingLibrary,
         isLiked,
+        isDisliked,
         isSaved,
+        isInWishlist,
         getRating,
         toggleLike,
+        toggleDislike,
         toggleSave,
+        toggleWishlist: toggleSave,
         setRating,
         refreshLibrary: fetchLibrary,
         likesCount: likedIds.size,
+        dislikesCount: dislikedIds.size,
         savedCount: savedIds.size,
+        wishlistCount: savedIds.size,
         ratedCount: Object.keys(ratingsMap).length,
       }}
     >

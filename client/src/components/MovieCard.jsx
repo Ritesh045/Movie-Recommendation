@@ -1,19 +1,28 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Heart, Bookmark, Check } from 'lucide-react';
+import { Star, ThumbsUp, ThumbsDown, Bookmark, Check } from 'lucide-react';
 import { useInteractions } from '../context/InteractionContext';
 import { useAuth } from '../context/AuthContext';
 
 const MovieCard = ({ movie, mode = 'hybrid', rank = null }) => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const { isLiked, isSaved, getRating, toggleLike, toggleSave } = useInteractions();
+  const { 
+    isLiked, 
+    isDisliked, 
+    isInWishlist, 
+    getRating, 
+    toggleLike, 
+    toggleDislike, 
+    toggleWishlist 
+  } = useInteractions();
 
   if (!movie) return null;
 
   const mid = Number(movie.movieId);
   const liked = isLiked(mid);
-  const saved = isSaved(mid);
+  const disliked = isDisliked(mid);
+  const inWishlist = isInWishlist(mid);
   const userRating = movie.user_rating !== undefined ? movie.user_rating : getRating(mid);
 
   const title = movie.clean_title || movie.title || 'Unknown';
@@ -33,13 +42,22 @@ const MovieCard = ({ movie, mode = 'hybrid', rank = null }) => {
     await toggleLike(mid);
   };
 
-  const handleSaveClick = async (e) => {
+  const handleDislikeClick = async (e) => {
     e.stopPropagation();
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
-    await toggleSave(mid);
+    await toggleDislike(mid);
+  };
+
+  const handleWishlistClick = async (e) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    await toggleWishlist(mid);
   };
 
   return (
@@ -60,30 +78,43 @@ const MovieCard = ({ movie, mode = 'hybrid', rank = null }) => {
           <div className="card-title mb-0 flex-grow-1 text-truncate" title={title}>
             {title}
           </div>
-          {/* Quick Action Icons */}
+          {/* Quick YouTube-Style Action Icons (Like, Dislike, Wishlist) */}
           <div className="d-flex align-items-center gap-1 ms-1">
+            {/* Quick Like */}
             <button
               type="button"
-              className={`btn btn-sm p-1 border-0 rounded-circle ${liked ? 'text-danger' : 'text-light text-opacity-75'}`}
-              style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)', lineHeight: 1 }}
+              className={`btn btn-sm p-1 border-0 rounded-circle ${liked ? 'text-light bg-danger' : 'text-light text-opacity-80'}`}
+              style={{ backgroundColor: liked ? '#e50914' : 'rgba(0, 0, 0, 0.7)', lineHeight: 1 }}
               onClick={handleLikeClick}
-              title={liked ? "Unlike" : "Like"}
-              aria-label={liked ? "Unlike" : "Like"}
+              title={liked ? "Remove Like" : "Like"}
+              aria-label={liked ? "Remove Like" : "Like"}
             >
-              <Heart size={14} fill={liked ? "#e50914" : "none"} color={liked ? "#e50914" : "#ffffff"} />
+              <ThumbsUp size={13} fill={liked ? "#ffffff" : "none"} color="#ffffff" />
             </button>
+            {/* Quick Dislike */}
             <button
               type="button"
-              className={`btn btn-sm p-1 border-0 rounded-circle ${saved ? 'text-warning' : 'text-light text-opacity-75'}`}
-              style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)', lineHeight: 1 }}
-              onClick={handleSaveClick}
-              title={saved ? "Remove from My List" : "Add to My List"}
-              aria-label={saved ? "Remove from My List" : "Add to My List"}
+              className={`btn btn-sm p-1 border-0 rounded-circle ${disliked ? 'text-light bg-danger' : 'text-light text-opacity-80'}`}
+              style={{ backgroundColor: disliked ? '#dc3545' : 'rgba(0, 0, 0, 0.7)', lineHeight: 1 }}
+              onClick={handleDislikeClick}
+              title={disliked ? "Remove Dislike" : "Dislike"}
+              aria-label={disliked ? "Remove Dislike" : "Dislike"}
             >
-              {saved ? (
-                <Check size={14} color="#ffd700" strokeWidth={3} />
+              <ThumbsDown size={13} fill={disliked ? "#ffffff" : "none"} color="#ffffff" />
+            </button>
+            {/* Quick Wishlist */}
+            <button
+              type="button"
+              className={`btn btn-sm p-1 border-0 rounded-circle ${inWishlist ? 'text-warning' : 'text-light text-opacity-80'}`}
+              style={{ backgroundColor: inWishlist ? 'rgba(255, 193, 7, 0.2)' : 'rgba(0, 0, 0, 0.7)', lineHeight: 1 }}
+              onClick={handleWishlistClick}
+              title={inWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+              aria-label={inWishlist ? "Remove from Wishlist" : "Add to Wishlist"}
+            >
+              {inWishlist ? (
+                <Check size={13} color="#ffd700" strokeWidth={3} />
               ) : (
-                <Bookmark size={14} color="#ffffff" />
+                <Bookmark size={13} color="#ffffff" />
               )}
             </button>
           </div>
@@ -93,8 +124,8 @@ const MovieCard = ({ movie, mode = 'hybrid', rank = null }) => {
           {scorePct ? (
             <span className="card-match-pill">{scorePct}% Match</span>
           ) : userRating ? (
-            <span className="badge bg-warning text-dark px-1 py-0" style={{ fontSize: '0.72rem' }}>
-              You: {userRating}★
+            <span className="badge bg-warning text-dark px-1 py-0 fw-bold" style={{ fontSize: '0.72rem' }}>
+              You: {Number(userRating).toFixed(1)}★
             </span>
           ) : (
             <span className="text-secondary">{movie.year_display}</span>

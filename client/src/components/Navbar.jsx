@@ -9,7 +9,7 @@ const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
-  const { savedCount } = useInteractions();
+  const { wishlistCount } = useInteractions();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -55,7 +55,7 @@ const Navbar = () => {
               🔥 Trending {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
             </Link>
             <Link to="/my-list" className={`nav-link-custom ${location.pathname === '/my-list' ? 'active' : ''}`}>
-              🔖 My List {savedCount > 0 && <span className="badge bg-danger ms-1 px-1 py-0" style={{ fontSize: '0.65rem' }}>{savedCount}</span>} {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
+              🔖 Wishlist {wishlistCount > 0 && <span className="badge bg-danger ms-1 px-1 py-0" style={{ fontSize: '0.65rem' }}>{wishlistCount}</span>} {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
             </Link>
             <Link to="/search" className={`nav-link-custom ${location.pathname === '/search' ? 'active' : ''}`}>
               Explore & Search {!isAuthenticated && <Lock size={12} className="ms-1 opacity-50" />}
